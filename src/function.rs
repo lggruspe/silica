@@ -11,11 +11,11 @@ pub enum Function {
 }
 
 pub trait Callable {
-    fn call(&mut self, lua: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>;
+    fn call(&self, lua: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>;
 }
 
 impl Callable for Function {
-    fn call(&mut self, lua: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+    fn call(&self, lua: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
         match self {
             Function::Native(func) => {
                 let FunctionBody(params, block) = func;

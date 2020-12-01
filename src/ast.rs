@@ -1,5 +1,6 @@
 use crate::function::{Callable, Function};
 use crate::interpreter::Interpreter;
+use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::{Float, Value};
 
@@ -112,13 +113,15 @@ impl Expression {
             // Dot3
             Expression::Variable(name) => Ok(lua.env.get(&Value::String(name.clone())).clone()),
             // TODO closures?
-            Expression::Function(body) => Ok(Value::Function(Function::Native(body.clone()))),
+            Expression::Function(body) => Ok(Value::Reference(ObjectReference::new(
+                Object::Function(Function::Native(body.clone())),
+            ))),
             Expression::Table(fields) => {
                 let mut table = Table::new();
                 for (key, val) in fields {
                     table.set(key.eval(lua)?, val.eval(lua)?)?;
                 }
-                Ok(Value::Table(table))
+                Ok(Value::Reference(ObjectReference::new(Object::Table(table))))
             }
             Expression::Binary(left, binop, right) => match binop {
                 BinaryOp::Plus => left.eval(lua)?.add(&right.eval(lua)?),
@@ -178,7 +181,10 @@ impl Expression {
                     UnaryOp::Not => Ok(Value::Boolean(!val.is_truthy())),
                     UnaryOp::Hash => match val {
                         Value::String(s) => Ok(Value::Integer(s.len() as i64)), // should be no longer than max i64
-                        Value::Table(t) => Ok(Value::Integer(t.size())),
+                        Value::Reference(ObjectReference(o)) => match &*o.borrow() {
+                            Object::Table(t) => Ok(Value::Integer(t.size())),
+                            _ => unimplemented!(),
+                        },
                         _ => Err(Exception::RuntimeError("invalid attempt to get length")),
                     },
                     UnaryOp::Tilde => {
@@ -197,14 +203,18 @@ impl Expression {
                 let (left, right) = (left.eval(lua)?, right.eval(lua)?);
                 match left {
                     Value::String(_) => unimplemented!(),
-                    Value::Table(t) => {
-                        if let Some(val) = t.get(&right) {
-                            Ok(val.clone())
-                        } else {
-                            Err(Exception::RuntimeError("invalid attempt to index a value"))
+                    Value::Reference(ObjectReference(o)) => match &*o.borrow() {
+                        Object::Table(t) => {
+                            if let Some(val) = t.get(&right) {
+                                Ok(val.clone())
+                            } else {
+                                Ok(Value::Nil)
+                            }
                         }
-                    }
-                    Value::UserData => unimplemented!(),
+                        Object::UserData => unimplemented!(),
+                        // TODO Thread?
+                        _ => Err(Exception::RuntimeError("invalid attempt to index a value")),
+                    },
                     _ => Err(Exception::RuntimeError("invalid attempt to index a value")), // can't index nil, bool, number, function, thread
                 }
             }
@@ -215,11 +225,18 @@ impl Expression {
                 for arg in args {
                     vals.push(arg.eval(lua)?);
                 }
-                let mut func = match func.eval(lua)? {
-                    Value::Function(func) => func,
+                let func = func.eval(lua)?;
+                let func_ref = match func {
+                    Value::Reference(ObjectReference(o)) => o,
                     _ => return Err(Exception::RuntimeError("invalid attempt to call a value")),
                 };
-                let result = func.call(lua, vals)?;
+                let func_ref = func_ref.borrow();
+                let f = if let Object::Function(f) = &*func_ref {
+                    f
+                } else {
+                    return Err(Exception::RuntimeError("invalid attempt to call a value"));
+                };
+                let result = f.call(lua, vals)?;
                 if let Some(val) = result.first() {
                     Ok(val.clone())
                 } else {
@@ -250,9 +267,15 @@ impl Statement {
                             lua.env.set(var, val);
                         }
                         Expression::Index(left, right) => {
-                            if let Value::Table(mut t) = left.eval(lua)? {
+                            if let Value::Reference(ObjectReference(o)) = left.eval(lua)? {
                                 // only table can be indexed in this context?
-                                let _ = t.set(right.eval(lua)?, val);
+                                if let Object::Table(t) = &mut *o.borrow_mut() {
+                                    let _ = t.set(right.eval(lua)?, val);
+                                } else {
+                                    return Err(Exception::RuntimeError(
+                                        "invalid attempt to index a value",
+                                    ));
+                                }
                             } else {
                                 return Err(Exception::RuntimeError(
                                     "invalid attempt to index a value",

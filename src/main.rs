@@ -21,9 +21,11 @@ fn main() -> Result<(), Error> {
         // println!("DEBUG {:#?}", chunk);
         if let Err(Exception::RuntimeError(msg)) = exec_block(&chunk, &mut lua) {
             println!("Runtime error: {}", msg);
+            process::exit(1);
         }
     } else {
         println!("Syntax error");
+        process::exit(1);
     }
     Ok(())
 }

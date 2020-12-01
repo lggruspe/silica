@@ -1,6 +1,5 @@
 use crate::ast::Exception;
-use crate::function::Function;
-use crate::table::Table;
+use crate::object::ObjectReference;
 use std::hash::{Hash, Hasher};
 
 /// Integer overflow should cause the value to wrap around 2C-style.
@@ -40,12 +39,7 @@ pub enum Value {
     Integer(i64), // ints and floats are both numbers
     Float(Float),
     String(String),
-
-    // objects (references)
-    Function(Function),
-    UserData, // TODO
-    Thread,   // TODO
-    Table(Table),
+    Reference(ObjectReference),
 }
 
 impl Value {
@@ -64,11 +58,7 @@ impl Value {
             Value::Float(_) => "number",
             Value::Integer(_) => "number",
             Value::String(_) => "string",
-            Value::Function(_) => "function",
-            // Value::UserData,
-            // Value::Thread,
-            Value::Table(_) => "table",
-            _ => unimplemented!(),
+            Value::Reference(o) => o.type_str(),
         }
     }
 
@@ -80,13 +70,7 @@ impl Value {
             Value::Integer(n) => n.to_string(),
             Value::Float(Float(x)) => x.to_string(),
             Value::String(s) => s.clone(),
-
-            // TODO print memory address for objects
-            Value::Function(_) => "function".to_string(),
-            // Value::UserData
-            // Value::Thread
-            Value::Table(_) => "table".to_string(),
-            _ => unimplemented!(),
+            Value::Reference(o) => o.tostring(),
         }
     }
 

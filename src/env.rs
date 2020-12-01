@@ -1,4 +1,5 @@
 use crate::function::{print_, Function};
+use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::Value;
 
@@ -12,7 +13,9 @@ impl Environment {
         let mut global = Table::new();
         let _ = global.set(
             Value::String("print".to_string()),
-            Value::Function(Function::Foreign(print_)),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                print_,
+            )))),
         );
         Environment {
             global,
