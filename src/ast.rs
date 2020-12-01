@@ -262,9 +262,8 @@ impl Statement {
                 }
                 for (var, val) in vars.iter().zip(vals) {
                     match var {
-                        Expression::Variable(_) => {
-                            let var = var.eval(lua)?;
-                            lua.env.set(var, val);
+                        Expression::Variable(name) => {
+                            lua.env.set(Value::String(name.clone()), val);
                         }
                         Expression::Index(left, right) => {
                             if let Value::Reference(ObjectReference(o)) = left.eval(lua)? {
