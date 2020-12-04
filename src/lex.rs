@@ -212,24 +212,14 @@ fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
     // invalid escape sequences and unescaped line breaks not allowed
     // `\xXX` (XX two hexdigits) or `\ddd` (3 decimal digits) can describe any byte
     // `\u{XXX}` unicode code points, but XXX < 2^31
-    //
-    // long literal strings delimited by [=[ (any number of '='s)
-    // and closed by ]=] with the same number of '='s as opening delim
-    // can have multple lines, doesn't interpret escape sequences
-    // carriage return, newline, carriage return followed by a newline,
-    // newline followed by a carriage return, etc. are all converted
-    // to a simple newline
-    // if the opening bracket is followed immediately by a newline,
-    // the newline is excluded from the string
-
-    let mut string = String::from("");
+    let mut string = String::new();
     let mut has_invalid_escape = false;
     loop {
-        let c = scanner.peek();
-        if let None = c {
+        let c = if let Some(c) = scanner.peek() {
+            c
+        } else {
             return Some(Token::Error(ScanError::UnexpectedEOF));
-        }
-        let c = c.unwrap();
+        };
         if c == delim {
             scanner.advance();
             return if has_invalid_escape {
@@ -312,41 +302,144 @@ fn skip_whitespace(scanner: &mut Scanner) {
     }
 }
 
-fn match_long_comment(scanner: &mut Scanner) {
-    // assume -- has been consumed
-    let first = scanner.advance();
-    assert_eq!(first.unwrap(), '[');
-    let mut level: i32 = 0;
+fn resume_opening_long_bracket(scanner: &mut Scanner) -> Option<usize> {
+    let checkpoint = scanner.source.clone();
+    let mut level = 0;
     loop {
         match scanner.advance() {
             Some('=') => level += 1,
-            Some('[') => break,
-            Some('\n') => {
-                scanner.line_number += 1;
-                return;
-            }
+            Some('[') => return Some(level),
             _ => {
-                level = -1;
-                break;
+                scanner.source = checkpoint;
+                return None;
             }
         }
     }
-    if level < 0 {
-        return skip_line(scanner);
+}
+
+/// Tries to match opening long bracket (`[[`, `[=[`, `[==[`, ...) and
+/// returns the bracket level (number of `=`s).
+/// If it fails to match an opening bracket, then it reverts the scanner
+/// to its state before the attempt and returns [`None`].
+fn opening_long_bracket(scanner: &mut Scanner) -> Option<usize> {
+    let checkpoint = scanner.source.clone();
+    if let Some('[') = scanner.advance() {
+    } else {
+        scanner.source = checkpoint;
+        return None;
     }
-    let closing = "=".repeat(level as usize) + "]";
+    resume_opening_long_bracket(scanner)
+}
+
+/// Assumes first `]` has been consumed, so it only checks for `=`s and
+/// `]`.
+/// Returns true if it successfully matches a clonsing long bracket.
+/// Otherwise, it returns false and reverts the scanner to its state
+/// before the attempt.
+fn resume_closing_long_bracket(scanner: &mut Scanner, level: usize) -> bool {
+    let checkpoint = scanner.source.clone();
+    let mut count = 0;
+    loop {
+        match scanner.advance() {
+            Some('=') => count += 1,
+            Some(']') => {
+                if count == level {
+                    return true;
+                } else {
+                    scanner.source = checkpoint;
+                    return false;
+                }
+            }
+            _ => {
+                scanner.source = checkpoint;
+                return false;
+            }
+        }
+    }
+}
+
+fn match_long_comment(scanner: &mut Scanner) {
+    // assume -- has been consumed
+    let level = if let Some(level) = opening_long_bracket(scanner) {
+        level
+    } else {
+        return skip_line(scanner);
+    };
     while let Some(c) = scanner.advance() {
         if c == '\n' {
             scanner.line_number += 1;
-        } else if c == ']' {
-            if scanner.source.as_str().starts_with(&closing) {
-                for _ in 0..level + 1 {
+        } else if c == ']' && resume_closing_long_bracket(scanner, level) {
+            break;
+        }
+    }
+}
+
+// long literal strings delimited by [=[ (any number of '='s)
+// and closed by ]=] with the same number of '='s as opening delim
+// can have multiple lines, doesn't interpret escape sequences,
+// carriage return, newline, carriage return followed by a newline,
+// newline followed by a carriage return, etc. are all converted
+// to a simple newline
+// if the opening bracket is followed immediately by a newline,
+// the newline is excluded from the string
+fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Token> {
+    let checkpoint = scanner.source.clone();
+    let level = if let Some(level) = resume_opening_long_bracket(scanner) {
+        level
+    } else {
+        scanner.source = checkpoint;
+        return None;
+    };
+
+    // Drop newline immediately after opening long bracket.
+    match scanner.peek() {
+        Some('\n') => {
+            scanner.advance();
+            if let Some('\r') = scanner.peek() {
+                scanner.advance();
+            }
+        }
+        Some('\r') => {
+            scanner.advance();
+            if let Some('\n') = scanner.peek() {
+                scanner.advance();
+            }
+        }
+        _ => (),
+    }
+
+    let mut val = String::new();
+    loop {
+        match scanner.advance() {
+            Some('\n') => {
+                scanner.line_number += 1;
+                if let Some('\r') = scanner.peek() {
                     scanner.advance();
                 }
-                break;
+                val.push('\n');
+            }
+            Some('\r') => {
+                scanner.line_number += 1;
+                if let Some('\n') = scanner.peek() {
+                    scanner.advance();
+                }
+                val.push('\n');
+            }
+            Some(']') => {
+                if resume_closing_long_bracket(scanner, level) {
+                    break;
+                } else {
+                    val.push(']');
+                }
+            }
+            Some(c) => val.push(c),
+            None => {
+                scanner.source = checkpoint;
+                return Some(Token::Error(ScanError::UnexpectedEOF));
             }
         }
     }
+    Some(Token::String(val))
 }
 
 fn skip_line(scanner: &mut Scanner) {
@@ -425,7 +518,13 @@ impl Iterator for Scanner<'_> {
             ')' => Some(Token::RightParen),
             '{' => Some(Token::LeftBrace),
             '}' => Some(Token::RightBrace),
-            '[' => Some(Token::LeftBracket),
+            '[' => {
+                if let Some(tok) = resume_long_literal_string(self) {
+                    Some(tok)
+                } else {
+                    Some(Token::LeftBracket)
+                }
+            }
             ']' => Some(Token::RightBracket),
             ':' => Some(self.advance_if_eq_else(':', Token::Colon2, Token::Colon)),
             ';' => Some(Token::SemiColon),

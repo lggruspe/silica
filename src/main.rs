@@ -20,11 +20,11 @@ fn main() -> Result<(), Error> {
     if let Ok(chunk) = parse(&mut parser) {
         // println!("DEBUG {:#?}", chunk);
         if let Err(Exception::RuntimeError(msg)) = exec_block(&chunk, &mut lua) {
-            println!("Runtime error: {}", msg);
+            eprintln!("Runtime error: {}", msg);
             process::exit(1);
         }
     } else {
-        println!("Syntax error");
+        eprintln!("Syntax error");
         process::exit(1);
     }
     Ok(())
