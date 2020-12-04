@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
 }
 
 #[derive(Debug)]
-pub struct SyntaxError;
+pub struct SyntaxError(&'static str);
 
 pub fn parse(parser: &mut Parser) -> Result<Block, SyntaxError> {
     parse_chunk(parser)
@@ -40,7 +40,7 @@ fn parse_chunk(parser: &mut Parser) -> Result<Block, SyntaxError> {
     if parser.current().is_none() {
         block
     } else {
-        Err(SyntaxError) // expected Eof
+        Err(SyntaxError("<eof> expected")) // NOTE is this reachable?
     }
 }
 
@@ -114,19 +114,20 @@ fn parse_stat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                     let explist = parse_explist(parser)?;
                     return Ok(Statement::Assign(varlist, explist));
                 } else {
-                    return Err(SyntaxError); // expect =
+                    return Err(SyntaxError("expected '='"));
                 }
             } else {
                 parser.scanner.source = source.clone();
                 parser.scanner.line_number = line_number;
                 parser.current = current.clone();
-                if let Ok(stat) = parse_functioncall(parser) {
-                    return Ok(stat);
-                } else {
-                    parser.scanner.source = source;
-                    parser.scanner.line_number = line_number;
-                    parser.current = current;
-                    return Err(SyntaxError);
+                match parse_functioncall(parser) {
+                    Ok(stat) => return Ok(stat),
+                    Err(err) => {
+                        parser.scanner.source = source;
+                        parser.scanner.line_number = line_number;
+                        parser.current = current;
+                        return Err(err);
+                    }
                 }
             }
         }
@@ -146,7 +147,7 @@ fn parse_retstat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     if let Some(Token::Return) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("")); // TODO add error message? or pre-consume 'return'?
     }
     if let Some(Token::SemiColon) = parser.current() {
         parser.advance();
@@ -169,7 +170,7 @@ fn cont_goto(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         parser.advance();
         Ok(Statement::Goto(name))
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected identifier"))
     }
 }
 
@@ -187,10 +188,10 @@ fn cont_while(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             parser.advance();
             Ok(Statement::While(exp, block))
         } else {
-            Err(SyntaxError) // expected end
+            Err(SyntaxError("expected 'end' (to close 'while')"))
         }
     } else {
-        Err(SyntaxError) // expected do
+        Err(SyntaxError("expected 'do'"))
     }
 }
 
@@ -204,7 +205,7 @@ fn cont_repeat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         stat.push(Statement::While(exp, block));
         Ok(Statement::Do(stat))
     } else {
-        Err(SyntaxError) // expected until
+        Err(SyntaxError("expected 'until' (to close 'repeat')"))
     }
 }
 
@@ -213,7 +214,7 @@ fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     if let Some(Token::Then) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError); // expected then
+        return Err(SyntaxError("expected 'then'"));
     }
     let then = parse_block(parser)?;
     let mut else_ifs = Vec::new();
@@ -223,7 +224,7 @@ fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         if let Some(Token::Then) = parser.current() {
             parser.advance();
         } else {
-            return Err(SyntaxError); // expected then
+            return Err(SyntaxError("expected 'then'"));
         }
         let block = parse_block(parser)?;
         else_ifs.push((exp, block));
@@ -237,7 +238,7 @@ fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     if let Some(Token::End) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("expected 'end' (to close 'if')"));
     }
     while !else_ifs.is_empty() {
         let (exp, block) = else_ifs.pop().unwrap();
@@ -252,7 +253,7 @@ fn parse_namelist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
         names.push(name.clone());
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("expected identifier"));
     }
     while let Some(Token::Comma) = parser.current() {
         parser.advance();
@@ -260,7 +261,7 @@ fn parse_namelist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
             names.push(name.clone());
             parser.advance();
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("<name> expected"));
         }
     }
     Ok(names)
@@ -273,13 +274,13 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         Some(Token::Equal) => {
             parser.advance();
             if namelist.len() != 1 {
-                return Err(SyntaxError);
+                return Err(SyntaxError("")); // TODO add error message
             }
             let start = parse_exp(parser)?;
             if let Some(Token::Comma) = parser.current() {
                 parser.advance();
             } else {
-                return Err(SyntaxError); // expected comma
+                return Err(SyntaxError("expected ','"));
             }
             let end = parse_exp(parser)?;
             let step = if let Some(Token::Comma) = parser.current() {
@@ -291,7 +292,7 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             if let Some(Token::Do) = parser.current() {
                 parser.advance();
             } else {
-                return Err(SyntaxError); // expected do
+                return Err(SyntaxError("expected 'do'"));
             }
             let block = parse_block(parser)?;
             if let Some(Token::End) = parser.current() {
@@ -304,7 +305,7 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                     block,
                 ));
             } else {
-                return Err(SyntaxError); // expected end
+                return Err(SyntaxError("expected 'end' (to close 'for')")); // expected end
             }
         }
         Some(Token::In) => {
@@ -317,30 +318,31 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                     parser.advance();
                     return Ok(Statement::GenericFor(namelist, explist, block));
                 } else {
-                    return Err(SyntaxError);
+                    return Err(SyntaxError("expected 'end' (to close 'for')"));
                 }
             } else {
-                return Err(SyntaxError);
+                return Err(SyntaxError("expected 'do'"));
             }
         }
-        _ => Err(SyntaxError), // expected in or =
+        _ => Err(SyntaxError("expected '=', or 'in'")), // or ','?
     }
 }
 
 fn cont_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     // TODO test
-    if let Ok((func, is_method)) = parse_funcname(parser) {
-        let body = parse_funcbody(parser)?;
-        Ok(Statement::Assign(
-            vec![func],
-            vec![Expression::Function(if is_method {
-                body.to_method()
-            } else {
-                body
-            })],
-        ))
-    } else {
-        Err(SyntaxError)
+    match parse_funcname(parser) {
+        Ok((func, is_method)) => {
+            let body = parse_funcbody(parser)?;
+            Ok(Statement::Assign(
+                vec![func],
+                vec![Expression::Function(if is_method {
+                    body.to_method()
+                } else {
+                    body
+                })],
+            ))
+        }
+        Err(err) => Err(err),
     }
 }
 
@@ -355,7 +357,7 @@ fn cont_local_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             vec![Expression::Function(body)],
         ))
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("<name> expected"))
     }
 }
 
@@ -366,7 +368,7 @@ fn parse_funcname(parser: &mut Parser) -> Result<(Expression, bool), SyntaxError
         parser.advance();
         Expression::Variable(name)
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("<name> expected"));
     };
     while let Some(Token::Dot) = parser.current() {
         parser.advance();
@@ -374,7 +376,7 @@ fn parse_funcname(parser: &mut Parser) -> Result<(Expression, bool), SyntaxError
             exp = Expression::Index(Box::new(exp), Box::new(Expression::String(name.clone())));
             parser.advance();
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("<name> expected"));
         }
     }
     if let Some(Token::Colon) = parser.current() {
@@ -385,7 +387,7 @@ fn parse_funcname(parser: &mut Parser) -> Result<(Expression, bool), SyntaxError
                 true,
             ))
         } else {
-            Err(SyntaxError)
+            Err(SyntaxError("<name> expected"))
         }
     } else {
         Ok((exp, false))
@@ -601,7 +603,7 @@ fn parse_exp_operand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     } else if let Ok(prefix) = parse_prefixexp(parser) {
         Ok(prefix)
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("unexpected symbol"))
     }
 }
 
@@ -618,26 +620,29 @@ fn parse_funcbody(parser: &mut Parser) -> Result<FunctionBody, SyntaxError> {
     if let Some(Token::LeftParen) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("'(' expected"));
     }
     let parlist = if let Some(Token::RightParen) = parser.current() {
         parser.advance();
         vec![]
-    } else if let Ok(parlist) = parse_parlist(parser) {
-        if let Some(Token::RightParen) = parser.current() {
-            parser.advance();
-        } else {
-            return Err(SyntaxError);
-        }
-        parlist
     } else {
-        return Err(SyntaxError);
+        match parse_parlist(parser) {
+            Ok(parlist) => {
+                if let Some(Token::RightParen) = parser.current() {
+                    parser.advance();
+                } else {
+                    return Err(SyntaxError("expected ')'"));
+                }
+                parlist
+            }
+            Err(err) => return Err(err),
+        }
     };
     let block = parse_block(parser)?; // TODO test parse_block (stack overflow)
     if let Some(Token::End) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("expected 'end' (to close 'function')"));
     }
     Ok(FunctionBody(parlist, block))
 }
@@ -652,7 +657,7 @@ fn parse_parlist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
             names.push(name.clone());
             parser.advance();
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("expected argument"));
         }
         while let Some(Token::Comma) = parser.current() {
             parser.advance();
@@ -667,7 +672,7 @@ fn parse_parlist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
                     break;
                 }
                 _ => {
-                    return Err(SyntaxError);
+                    return Err(SyntaxError("expected argument"));
                 }
             }
         }
@@ -685,10 +690,10 @@ fn parse_varlist(parser: &mut Parser) -> Result<Vec<Expression>, SyntaxError> {
 }
 
 fn parse_functioncall(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    if let Ok(Expression::FunctionCall(func, args)) = parse_prefixexp(parser) {
-        Ok(Statement::FunctionCall(*func, args))
-    } else {
-        Err(SyntaxError) // expected function or method call
+    match parse_prefixexp(parser) {
+        Ok(Expression::FunctionCall(func, args)) => Ok(Statement::FunctionCall(*func, args)),
+        Err(err) => Err(err), // expected function or method call
+        _ => Err(SyntaxError("expected statement")),
     }
 }
 
@@ -696,12 +701,12 @@ fn parse_label(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     if let Some(Token::Colon2) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("")); // TODO add error message? or pre-consume ::?
     }
     let name = if let Some(Token::Name(name)) = parser.current() {
         name.clone()
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("expected identifier"));
     };
     parser.advance();
 
@@ -709,7 +714,7 @@ fn parse_label(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         parser.advance();
         Ok(Statement::Label(name))
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected '::"))
     }
 }
 
@@ -722,7 +727,7 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
                 parser.advance();
                 exp
             } else {
-                return Err(SyntaxError);
+                return Err(SyntaxError("expected expression"));
             }
         }
         Some(Token::Name(name)) => {
@@ -731,7 +736,7 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
             Expression::Variable(name)
         }
         _ => {
-            return Err(SyntaxError);
+            return Err(SyntaxError("")); // TODO is this reachable?
         }
     };
     loop {
@@ -743,7 +748,7 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
                     parser.advance();
                     prefix = Expression::Index(Box::new(prefix), Box::new(exp))
                 } else {
-                    return Err(SyntaxError);
+                    return Err(SyntaxError("expected expression"));
                 }
             }
             Some(Token::Dot) => {
@@ -754,7 +759,7 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
                     prefix =
                         Expression::Index(Box::new(prefix), Box::new(Expression::String(name)));
                 } else {
-                    return Err(SyntaxError);
+                    return Err(SyntaxError("expected identifier"));
                 }
             }
             Some(Token::Colon) => {
@@ -796,7 +801,7 @@ fn parse_args(parser: &mut Parser) -> Result<Argument, SyntaxError> {
             if let Some(Token::RightParen) = parser.current() {
                 parser.advance();
             } else {
-                return Err(SyntaxError);
+                return Err(SyntaxError("expected ')' (to close '(')"));
             }
             Ok(explist)
         }
@@ -809,7 +814,7 @@ fn parse_args(parser: &mut Parser) -> Result<Argument, SyntaxError> {
             let table = parse_tableconstructor(parser)?;
             Ok(vec![Expression::Table(table)])
         }
-        _ => Err(SyntaxError),
+        _ => Err(SyntaxError("unexpected symbol")),
     }
 }
 
@@ -817,7 +822,7 @@ fn parse_var(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     match parse_prefixexp(parser) {
         Ok(Expression::Variable(name)) => Ok(Expression::Variable(name)),
         Ok(Expression::Index(a, b)) => Ok(Expression::Index(a, b)),
-        _ => Err(SyntaxError),
+        _ => Err(SyntaxError("expected identifier or field")),
     }
 }
 
@@ -827,7 +832,7 @@ fn parse_tableconstructor(
     if let Some(Token::LeftBrace) = parser.current() {
         parser.advance();
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("")); // TODO add error message? or pre-consume '{'?
     }
     if let Some(Token::RightBrace) = parser.current() {
         parser.advance();
@@ -838,7 +843,7 @@ fn parse_tableconstructor(
         parser.advance();
         Ok(result)
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected '}' (to close '{')"))
     }
 }
 
@@ -870,15 +875,18 @@ fn parse_fieldlist(parser: &mut Parser) -> Result<Vec<(Expression, Expression)>,
 }
 
 fn parse_fieldsep(parser: &mut Parser) -> Result<Token, SyntaxError> {
-    let result = match parser.current() {
-        Some(Token::Comma) => Ok(Token::Comma),
-        Some(Token::SemiColon) => Ok(Token::SemiColon),
-        _ => Err(SyntaxError),
-    };
-    if result.is_ok() {
-        parser.advance();
+    match parser.current() {
+        Some(Token::Comma) => {
+            parser.advance();
+            Ok(Token::Comma)
+        }
+        Some(Token::SemiColon) => {
+            parser.advance();
+            Ok(Token::SemiColon)
+        }
+        Some(_) => Err(SyntaxError("expected '}' (to close '{')")),
+        None => Err(SyntaxError("")), // TODO add error message
     }
-    result
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -891,12 +899,12 @@ fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
         if let Some(Token::RightBracket) = parser.current() {
             parser.advance();
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("']' expected"));
         }
         if let Some(Token::Equal) = parser.current() {
             parser.advance();
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("expected '='"));
         }
         let right = parse_exp(parser)?;
         Ok(Field(Some(left), right))
@@ -914,7 +922,7 @@ fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
             Ok(Field(None, exp))
         }
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected expression"))
     }
 }
 
@@ -923,7 +931,7 @@ fn parse_functiondef(parser: &mut Parser) -> Result<Expression, SyntaxError> {
         parser.advance();
         Ok(Expression::Function(parse_funcbody(parser)?)) // TODO Test funcbody
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("")) // TODO add error message? or pre-consume 'function'?
     }
 }
 
@@ -940,7 +948,7 @@ fn cont_local(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             Ok(Statement::Declare(attnamelist, Vec::new()))
         }
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected identifier"))
     }
 }
 
@@ -960,12 +968,12 @@ fn parse_attnamelist(parser: &mut Parser) -> Result<Vec<(String, Option<String>)
                 let attrib = parse_attrib(parser)?;
                 attnames.push((name, attrib));
             } else {
-                return Err(SyntaxError);
+                return Err(SyntaxError("expected identifier"));
             }
         }
         Ok(attnames)
     } else {
-        Err(SyntaxError)
+        Err(SyntaxError("expected identifier"))
     }
 }
 
@@ -982,10 +990,10 @@ fn parse_attrib(parser: &mut Parser) -> Result<Option<String>, SyntaxError> {
             parser.advance();
             return Ok(Some(name));
         } else {
-            return Err(SyntaxError);
+            return Err(SyntaxError("expected '>' (to close '<')"));
         }
     } else {
-        return Err(SyntaxError);
+        return Err(SyntaxError("expected identifier"));
     }
 }
 
