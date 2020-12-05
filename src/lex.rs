@@ -250,10 +250,14 @@ fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
 
 impl<'a> Scanner<'a> {
     fn new(source: &'a str) -> Self {
-        Scanner {
+        let mut scanner = Scanner {
             source: source.chars(),
             line_number: 1,
+        };
+        if scanner.source.as_str().starts_with("#!") {
+            skip_line(&mut scanner);
         }
+        scanner
     }
 
     fn advance(&mut self) -> Option<char> {
@@ -443,7 +447,6 @@ fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Token> {
 }
 
 fn skip_line(scanner: &mut Scanner) {
-    // assume -- has been consumed
     while let Some(c) = scanner.advance() {
         if c == '\n' {
             scanner.line_number += 1;

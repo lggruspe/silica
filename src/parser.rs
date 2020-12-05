@@ -175,7 +175,13 @@ fn cont_goto(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 }
 
 fn parse_do(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    Ok(Statement::Do(parse_block(parser)?))
+    let block = parse_block(parser)?;
+    if let Some(Token::End) = parser.current() {
+        parser.advance();
+        Ok(Statement::Do(block))
+    } else {
+        Err(SyntaxError("expected 'end' (to close 'do')"))
+    }
 }
 
 fn cont_while(parser: &mut Parser) -> Result<Statement, SyntaxError> {
@@ -382,8 +388,10 @@ fn parse_funcname(parser: &mut Parser) -> Result<(Expression, bool), SyntaxError
     if let Some(Token::Colon) = parser.current() {
         parser.advance();
         if let Some(Token::Name(name)) = parser.current() {
+            let name = name.clone();
+            parser.advance();
             Ok((
-                Expression::Index(Box::new(exp), Box::new(Expression::String(name.clone()))),
+                Expression::Index(Box::new(exp), Box::new(Expression::String(name))),
                 true,
             ))
         } else {
