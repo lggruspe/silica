@@ -1,7 +1,7 @@
 use silica::ast::{exec_block, Exception};
 use silica::interpreter::Interpreter;
 use silica::lex::scan;
-use silica::parser::{parse, Parser};
+use silica::parser::{parse, Parser, SyntaxError};
 use std::env;
 use std::fs::read_to_string;
 use std::io::Error;
@@ -17,15 +17,18 @@ fn main() -> Result<(), Error> {
     let source = read_to_string(filename)?;
     let mut lua = Interpreter::new();
     let mut parser = Parser::new(scan(&source));
-    if let Ok(chunk) = parse(&mut parser) {
-        // println!("DEBUG {:#?}", chunk);
-        if let Err(Exception::RuntimeError(msg)) = exec_block(&chunk, &mut lua) {
-            eprintln!("Runtime error: {}", msg);
+    match parse(&mut parser) {
+        Ok(chunk) => {
+            // eprintln!("DEBUG {:#?}", chunk);
+            if let Err(Exception::RuntimeError(msg)) = exec_block(&chunk, &mut lua) {
+                eprintln!("Runtime error: {}", msg);
+                process::exit(1);
+            }
+        }
+        Err(SyntaxError(msg)) => {
+            eprintln!("Syntax error: {}", msg);
             process::exit(1);
         }
-    } else {
-        eprintln!("Syntax error");
-        process::exit(1);
     }
     Ok(())
 }

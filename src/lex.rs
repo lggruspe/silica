@@ -124,60 +124,80 @@ fn match_name(scanner: &mut Scanner, prefix: char) -> Token {
 }
 
 fn match_digits(scanner: &mut Scanner) -> String {
-    let mut lexeme = "".to_string();
-    loop {
-        match scanner.peek() {
-            Some(c) => {
-                if c.is_ascii_digit() {
-                    lexeme.push(c);
-                    scanner.advance();
-                } else {
-                    return lexeme;
-                }
-            }
-            _ => return lexeme,
+    let mut lexeme = String::new();
+    while let Some(c) = scanner.peek() {
+        if c.is_ascii_digit() {
+            lexeme.push(c);
+            scanner.advance();
+        } else {
+            break;
         }
+    }
+    lexeme
+}
+
+fn resume_exponent(scanner: &mut Scanner) -> Option<String> {
+    let mut exp = String::new();
+    if let Some(c) = scanner.peek() {
+        if c == '+' || c == '-' {
+            scanner.advance();
+            exp.push(c);
+        }
+    }
+    let exponent = match_digits(scanner);
+    if exponent.is_empty() {
+        None
+    } else {
+        exp += &exponent;
+        Some(exp)
     }
 }
 
 fn match_number(scanner: &mut Scanner, prefix: char) -> Token {
-    // assumption: scanner.peek() is a digit
-    // .4e-7 not covered
-    // has optional fraction and optional decimal exponent
-    // eE
+    // has optional fraction and optional decimal exponent eE
     // also accepts hexadecimal constants (0x or 0X ...)
     // hex constants can have an optional fraction and exponent (pP ... instead of eE)
     // numbers with a radix point or an exponent are floats
     // otherwise, integer (if it fits, otherwise it's a float)
-
-    let mut is_integer = true;
-    let mut lexeme = prefix.to_string();
-    lexeme += &match_digits(scanner);
-    if let Some('.') = scanner.peek() {
-        lexeme.push('.');
-        scanner.advance();
-        lexeme += &match_digits(scanner);
-        is_integer = false;
+    let mut points = 0;
+    let mut digits = 0;
+    let mut lexeme = if prefix == '.' {
+        points += 1;
+        String::from("0.")
+    } else {
+        assert!(prefix.is_ascii_digit());
+        digits += 1;
+        prefix.to_string()
+    };
+    while let Some(c) = scanner.peek() {
+        if c == '.' {
+            lexeme.push('.');
+            scanner.advance();
+            points += 1;
+        } else if c.is_ascii_digit() {
+            lexeme.push(c);
+            scanner.advance();
+            digits += 1;
+        } else {
+            break;
+        }
+    }
+    if points > 1 || digits < 1 {
+        return Token::Error(ScanError::MalformedNumber);
     }
     if let Some(c) = scanner.peek() {
         if c == 'e' || c == 'E' {
             scanner.advance();
             lexeme.push(c);
-            if let Some(c) = scanner.peek() {
-                if c == '+' || c == '-' {
-                    scanner.advance();
-                    lexeme.push(c);
-                }
-            }
-            let exponent = match_digits(scanner);
-            if exponent.is_empty() {
+            if let Some(exp) = resume_exponent(scanner) {
+                lexeme += &exp;
+                return Token::Float(lexeme.parse().unwrap());
+            } else {
                 return Token::Error(ScanError::MalformedNumber);
             }
-            lexeme += &exponent;
-            is_integer = false;
         }
     }
-    if is_integer {
+    if points == 0 {
         Token::Integer(lexeme.parse().unwrap())
     } else {
         Token::Float(lexeme.parse().unwrap())
@@ -535,14 +555,20 @@ impl Iterator for Scanner<'_> {
 
             // TODO what if number? Ex: .5e-1
             // TODO double check number of symbols consumed '.':
-            '.' => {
-                if let Some('.') = self.peek() {
+            '.' => match self.peek() {
+                Some('.') => {
                     self.advance();
                     Some(self.advance_if_eq_else('.', Token::Dot3, Token::Dot2))
-                } else {
-                    Some(Token::Dot)
                 }
-            }
+                Some(c) => {
+                    if c.is_ascii_digit() {
+                        Some(match_number(self, '.'))
+                    } else {
+                        Some(Token::Dot)
+                    }
+                }
+                _ => Some(Token::Dot),
+            },
             '\'' => match_string(self, '\''),
             '"' => match_string(self, '"'),
             _ => {
@@ -577,13 +603,17 @@ mod tests {
     #[test]
     fn test_match_number() {
         assert_eq!(
-            scan("1 1.0 1e0 1E+0 1e-0").collect::<Vec<Token>>(),
+            scan("1 1.0 1e0 1E+0 1e-0 1. .1 1.e-1 .1e0").collect::<Vec<Token>>(),
             vec![
                 Token::Integer(1),
                 Token::Float(1.0),
                 Token::Float(1.0),
                 Token::Float(1.0),
                 Token::Float(1.0),
+                Token::Float(1.0),
+                Token::Float(0.1),
+                Token::Float(0.1),
+                Token::Float(0.1),
             ],
         )
     }

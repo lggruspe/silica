@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
 }
 
 #[derive(Debug)]
-pub struct SyntaxError(&'static str);
+pub struct SyntaxError(pub &'static str);
 
 pub fn parse(parser: &mut Parser) -> Result<Block, SyntaxError> {
     parse_chunk(parser)
@@ -45,13 +45,19 @@ fn parse_chunk(parser: &mut Parser) -> Result<Block, SyntaxError> {
 }
 
 fn parse_block(parser: &mut Parser) -> Result<Block, SyntaxError> {
+    // TODO Fix error recovery
     let mut stats = Vec::new();
-    if let Ok(stat) = parse_stat(parser) {
-        stats.push(stat);
-        while let Ok(stat) = parse_stat(parser) {
+    match parse_stat(parser) {
+        Ok(stat) => {
             stats.push(stat);
+            while let Ok(stat) = parse_stat(parser) {
+                stats.push(stat);
+            }
         }
+        // Err(SyntaxError(msg)) => eprintln!("DEBUG {}", msg),
+        _ => (),
     }
+
     if let Ok(stat) = parse_retstat(parser) {
         stats.push(stat);
     }
@@ -561,7 +567,7 @@ fn parse_exp_caret(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     } else {
         return Ok(left);
     }
-    let right = parse_exp_caret(parser)?;
+    let right = parse_exp_unary(parser)?;
     Ok(Expression::Binary(
         Box::new(left),
         BinaryOp::Caret,

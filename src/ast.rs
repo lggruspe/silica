@@ -202,7 +202,7 @@ impl Expression {
             Expression::Index(left, right) => {
                 let (left, right) = (left.eval(lua)?, right.eval(lua)?);
                 match left {
-                    Value::String(_) => unimplemented!(),
+                    Value::String(_) => unimplemented!("index string value"),
                     Value::Reference(ObjectReference(o)) => match &*o.borrow() {
                         Object::Table(t) => {
                             if let Some(val) = t.get(&right) {
