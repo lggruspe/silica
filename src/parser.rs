@@ -556,7 +556,7 @@ fn parse_exp_unary(parser: &mut Parser) -> Result<Expression, SyntaxError> {
         return parse_exp_caret(parser);
     }
     parser.advance();
-    let exp = parse_exp_caret(parser)?;
+    let exp = parse_exp_unary(parser)?;
     Ok(Expression::Unary(unop.unwrap(), Box::new(exp)))
 }
 

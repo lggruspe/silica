@@ -153,7 +153,52 @@ fn resume_exponent(scanner: &mut Scanner) -> Option<String> {
     }
 }
 
-fn match_number(scanner: &mut Scanner, prefix: char) -> Token {
+fn resume_hex(scanner: &mut Scanner) -> Token {
+    // assume 0x or 0X has been consumed
+    let mut points = 0;
+    let mut digits = 0;
+    let mut lexeme = String::new();
+    while let Some(c) = scanner.peek() {
+        if c == '.' {
+            lexeme.push(c);
+            scanner.advance();
+            points += 1;
+        } else if c.is_ascii_hexdigit() {
+            lexeme.push(c);
+            scanner.advance();
+            digits += 1;
+        } else {
+            break;
+        }
+    }
+    if points > 1 || digits < 1 || lexeme.starts_with(".") {
+        return Token::Error(ScanError::MalformedNumber);
+    }
+    /*
+    // TODO hex exponents
+    if let Some(c) = scanner.peek() {
+        if c == 'p' || c == 'P' {
+            scanner.advance();
+            lexeme.push(c);
+            if let Some(exp) = resume_exponent(scanner) {
+                lexeme += &exp;
+                unimplemented!();
+            } else {
+                return Token::Error(ScanError::MalformedNumber);
+            }
+        }
+    }
+    */
+    if points == 0 {
+        // TODO if value overflows (e.g. 0xffffffffffffffff, it should
+        // wrap around to fit into a valid integer)
+        Token::Integer(i64::from_str_radix(&lexeme, 16).unwrap())
+    } else {
+        unimplemented!()
+    }
+}
+
+fn match_numeral(scanner: &mut Scanner, prefix: char) -> Token {
     // has optional fraction and optional decimal exponent eE
     // also accepts hexadecimal constants (0x or 0X ...)
     // hex constants can have an optional fraction and exponent (pP ... instead of eE)
@@ -169,6 +214,19 @@ fn match_number(scanner: &mut Scanner, prefix: char) -> Token {
         digits += 1;
         prefix.to_string()
     };
+    if lexeme == "0" {
+        match scanner.peek() {
+            Some('x') => {
+                scanner.advance();
+                return resume_hex(scanner);
+            }
+            Some('X') => {
+                scanner.advance();
+                return resume_hex(scanner);
+            }
+            _ => (),
+        }
+    }
     while let Some(c) = scanner.peek() {
         if c == '.' {
             lexeme.push('.');
@@ -562,7 +620,7 @@ impl Iterator for Scanner<'_> {
                 }
                 Some(c) => {
                     if c.is_ascii_digit() {
-                        Some(match_number(self, '.'))
+                        Some(match_numeral(self, '.'))
                     } else {
                         Some(Token::Dot)
                     }
@@ -575,7 +633,7 @@ impl Iterator for Scanner<'_> {
                 if lookahead.is_ascii_alphabetic() || lookahead == '_' {
                     Some(match_name(self, lookahead))
                 } else if lookahead.is_ascii_digit() {
-                    Some(match_number(self, lookahead))
+                    Some(match_numeral(self, lookahead))
                 } else {
                     Some(Token::Error(ScanError::UnexpectedCharacter(lookahead)))
                 }
@@ -601,9 +659,9 @@ mod tests {
     }
 
     #[test]
-    fn test_match_number() {
+    fn test_match_numeral() {
         assert_eq!(
-            scan("1 1.0 1e0 1E+0 1e-0 1. .1 1.e-1 .1e0").collect::<Vec<Token>>(),
+            scan("1 1.0 1e0 1E+0 1e-0 1. .1 1.e-1 .1e0 0x10").collect::<Vec<Token>>(),
             vec![
                 Token::Integer(1),
                 Token::Float(1.0),
@@ -614,6 +672,7 @@ mod tests {
                 Token::Float(0.1),
                 Token::Float(0.1),
                 Token::Float(0.1),
+                Token::Integer(16),
             ],
         )
     }
