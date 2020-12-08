@@ -9,6 +9,7 @@ pub enum Exception {
     // TODO break
     RuntimeError(&'static str),
     Return(Vec<Value>),
+    UserError(Value),
 }
 
 pub type Argument = Vec<Expression>;
@@ -437,12 +438,12 @@ impl Statement {
             }
             // Label(String),
             Statement::FunctionCall(func, args) => {
-                if let Err(Exception::RuntimeError(msg)) =
-                    Expression::FunctionCall(Box::new(func.clone()), args.clone()).eval(lua)
-                {
-                    return Err(Exception::RuntimeError(msg));
+                match Expression::FunctionCall(Box::new(func.clone()), args.clone()).eval(lua) {
+                    // TODO propagate Exception::Break
+                    Err(Exception::RuntimeError(msg)) => Err(Exception::RuntimeError(msg)),
+                    Err(Exception::UserError(msg)) => Err(Exception::UserError(msg)),
+                    _ => Ok(()),
                 }
-                Ok(())
             }
             _ => Ok(()),
         }

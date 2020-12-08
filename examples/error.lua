@@ -1,0 +1,2 @@
+error("bye")
+print("hello")

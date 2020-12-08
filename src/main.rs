@@ -20,9 +20,17 @@ fn main() -> Result<(), Error> {
     match parse(&mut parser) {
         Ok(chunk) => {
             // eprintln!("DEBUG {:#?}", chunk);
-            if let Err(Exception::RuntimeError(msg)) = exec_block(&chunk, &mut lua) {
-                eprintln!("Runtime error: {}", msg);
-                process::exit(1);
+            match exec_block(&chunk, &mut lua) {
+                Err(Exception::RuntimeError(msg)) => {
+                    eprintln!("Runtime error: {}", msg);
+                    process::exit(1);
+                }
+                Err(Exception::UserError(msg)) => {
+                    eprintln!("Runtime error: {:?}", msg);
+                    process::exit(1);
+                }
+                Err(_) => unimplemented!(),
+                Ok(()) => (),
             }
         }
         Err(SyntaxError(msg)) => {

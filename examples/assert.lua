@@ -1,0 +1,5 @@
+local x = assert(true)
+local y = assert(4)
+print(x, y)
+local z = assert()
+print(z)

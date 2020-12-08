@@ -1,4 +1,5 @@
-use crate::function::{print_, Function};
+use crate::basic;
+use crate::function::Function;
 use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::Value;
@@ -14,7 +15,37 @@ impl Environment {
         let _ = global.set(
             Value::String("print".to_string()),
             Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                print_,
+                basic::print_,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("assert".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::assert,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("error".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::error,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("tonumber".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::tonumber,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("tostring".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::tostring,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("type".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::type_,
             )))),
         );
         Environment {

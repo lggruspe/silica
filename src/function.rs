@@ -37,21 +37,10 @@ impl Callable for Function {
                         }
                         // TODO multiple return values
                     }
+                    Err(Exception::UserError(msg)) => Err(Exception::UserError(msg)),
                 }
             }
             Function::Foreign(func) => func(args),
         }
     }
-}
-
-pub fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
-    // TODO
-    if let Some(arg) = args.first() {
-        print!("{}", arg.tostring());
-    }
-    for arg in args.iter().skip(1) {
-        print!("\t{}", arg.tostring());
-    }
-    println!("");
-    Ok(vec![Value::Nil])
 }

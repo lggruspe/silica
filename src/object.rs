@@ -23,10 +23,9 @@ impl ObjectReference {
     pub fn type_str(&self) -> &str {
         match *self.0.borrow() {
             Object::Function(_) => "function",
-            // Object::UserData,
-            // Object::Thread,
+            Object::UserData => "userdata",
+            Object::Thread => "thread",
             Object::Table(_) => "table",
-            _ => unimplemented!(),
         }
     }
 

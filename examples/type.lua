@@ -1,0 +1,7 @@
+print(type(4))
+print(type(1e-1))
+print(type("hello"))
+print(type(nil))
+print(type{})
+print(type(function() end))
+print(type(true))
