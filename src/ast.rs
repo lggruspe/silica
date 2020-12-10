@@ -3,6 +3,7 @@ use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::{Float, Value};
+use std::cmp::{max, min};
 
 pub enum LuaResult {
     One(Value),
@@ -321,14 +322,24 @@ impl Expression {
                 }
             }
             Expression::FunctionCall(func, args) => {
-                // TODO multiple return values
                 // TODO callable tables
+                let count = max(1, args.len());
+                let mut i = 1;
                 let mut vals = Vec::new();
                 for arg in args {
-                    vals.push(match arg.eval(lua) {
-                        Ok(arg) => arg.first(), // TODO multiple return values from last arg
-                        Err(err) => return Err(err),
-                    });
+                    if i != count {
+                        vals.push(match arg.eval(lua) {
+                            Ok(arg) => arg.first(),
+                            Err(err) => return Err(err),
+                        });
+                    } else {
+                        match arg.eval(lua) {
+                            Ok(LuaResult::One(val)) => vals.push(val),
+                            Ok(LuaResult::Many(val)) => vals.append(&mut val.clone()),
+                            Err(err) => return Err(err),
+                        }
+                    }
+                    i += 1;
                 }
                 let func = match func.eval(lua) {
                     Ok(val) => val.first(),
@@ -344,11 +355,14 @@ impl Expression {
                 } else {
                     return Err(Exception::RuntimeError("invalid attempt to call a value"));
                 };
-                let result = match f.call(lua, vals) {
-                    Ok(result) => LuaResult::Many(result),
-                    Err(err) => return Err(err),
-                };
-                Ok(LuaResult::One(result.first())) // TODO multiple return values
+                match f.call(lua, vals) {
+                    Ok(res) => match res.len() {
+                        0 => Ok(LuaResult::One(Value::Nil)),
+                        1 => Ok(LuaResult::One(res.first().unwrap().clone())),
+                        _ => Ok(LuaResult::Many(res)),
+                    },
+                    Err(err) => Err(err),
+                }
             }
             _ => unimplemented!(),
         }
@@ -360,12 +374,23 @@ impl Statement {
         // println!("EXEC {:?}\n", self);
         match self {
             Statement::Assign(vars, exps) => {
+                let count = max(1, min(vars.len(), exps.len()));
+                let mut i = 1;
                 let mut vals = Vec::new();
                 for (_, exp) in vars.iter().zip(exps) {
-                    vals.push(match exp.eval(lua) {
-                        Ok(val) => val.first(), // TODO Multiple return values
-                        Err(err) => return Err(err),
-                    });
+                    if i != count {
+                        vals.push(match exp.eval(lua) {
+                            Ok(val) => val.first(),
+                            Err(err) => return Err(err),
+                        });
+                    } else {
+                        match exp.eval(lua) {
+                            Ok(LuaResult::One(val)) => vals.push(val),
+                            Ok(LuaResult::Many(val)) => vals.append(&mut val.clone()),
+                            Err(err) => return Err(err),
+                        }
+                    }
+                    i += 1;
                 }
                 while vals.len() < vars.len() {
                     vals.push(Value::Nil);
@@ -407,12 +432,23 @@ impl Statement {
                 Ok(())
             }
             Statement::Declare(atts, exps) => {
+                let count = max(1, min(atts.len(), exps.len()));
+                let mut i = 1;
                 let mut vals = Vec::new();
                 for (_, exp) in atts.iter().zip(exps) {
-                    vals.push(match exp.eval(lua) {
-                        Ok(val) => val.first(), // TODO Multiple return values
-                        Err(err) => return Err(err),
-                    });
+                    if i != count {
+                        vals.push(match exp.eval(lua) {
+                            Ok(val) => val.first(),
+                            Err(err) => return Err(err),
+                        });
+                    } else {
+                        match exp.eval(lua) {
+                            Ok(LuaResult::One(val)) => vals.push(val),
+                            Ok(LuaResult::Many(val)) => vals.append(&mut val.clone()),
+                            Err(err) => return Err(err),
+                        }
+                    }
+                    i += 1;
                 }
                 while vals.len() < atts.len() {
                     vals.push(Value::Nil);
@@ -460,7 +496,7 @@ impl Statement {
                 let mut vals = Vec::new();
                 for exp in exps {
                     vals.push(match exp.eval(lua) {
-                        Ok(val) => val.first(), // TODO multiple return values (from last argument?)
+                        Ok(val) => val.first(),
                         Err(err) => return Err(err),
                     });
                 }

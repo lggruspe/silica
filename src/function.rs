@@ -29,14 +29,7 @@ impl Callable for Function {
                 match result {
                     Ok(()) => Ok(vec![Value::Nil]),
                     Err(Exception::RuntimeError(msg)) => Err(Exception::RuntimeError(msg)),
-                    Err(Exception::Return(vals)) => {
-                        if let Some(val) = vals.first() {
-                            Ok(vec![val.clone()])
-                        } else {
-                            Ok(vec![Value::Nil])
-                        }
-                        // TODO multiple return values
-                    }
+                    Err(Exception::Return(vals)) => Ok(vals),
                     Err(Exception::UserError(msg)) => Err(Exception::UserError(msg)),
                 }
             }
