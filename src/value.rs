@@ -1,5 +1,5 @@
 use crate::ast::{Exception, LuaResult};
-use crate::object::ObjectReference;
+use crate::object::{Object, ObjectReference};
 use std::hash::{Hash, Hasher};
 
 /// Integer overflow should cause the value to wrap around 2C-style.
@@ -185,6 +185,25 @@ impl Value {
             _ => Err(Exception::RuntimeError(
                 "invalid attempt to perform bitwise operation",
             )),
+        }
+    }
+
+    pub fn index(&self, other: &Value) -> Result<Value, Exception> {
+        match self {
+            Value::String(_) => unimplemented!("index string value"),
+            Value::Reference(ObjectReference(o)) => match &*o.borrow() {
+                Object::Table(t) => {
+                    if let Some(val) = t.get(other) {
+                        Ok(val.clone())
+                    } else {
+                        Ok(Value::Nil)
+                    }
+                }
+                Object::UserData => unimplemented!(),
+                // TODO Thread?
+                _ => Err(Exception::RuntimeError("invalid attempt to index a value")),
+            },
+            _ => Err(Exception::RuntimeError("invalid attempt to index a value")), // can't index nil, bool, number, function, thread
         }
     }
 

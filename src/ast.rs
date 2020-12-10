@@ -304,22 +304,7 @@ impl Expression {
                     Ok(val) => val.first(),
                     Err(err) => return Err(err),
                 };
-                match left {
-                    Value::String(_) => unimplemented!("index string value"),
-                    Value::Reference(ObjectReference(o)) => match &*o.borrow() {
-                        Object::Table(t) => {
-                            if let Some(val) = t.get(&right) {
-                                Ok(LuaResult::One(val.clone()))
-                            } else {
-                                Ok(LuaResult::One(Value::Nil))
-                            }
-                        }
-                        Object::UserData => unimplemented!(),
-                        // TODO Thread?
-                        _ => Err(Exception::RuntimeError("invalid attempt to index a value")),
-                    },
-                    _ => Err(Exception::RuntimeError("invalid attempt to index a value")), // can't index nil, bool, number, function, thread
-                }
+                Ok(left.index(&right)?.into_luaresult())
             }
             Expression::FunctionCall(func, args) => {
                 // TODO callable tables
@@ -502,10 +487,10 @@ impl Statement {
                 }
                 Err(Exception::Return(vals))
             }
-            Statement::GenericFor(namelist, explist, _block) => {
+            Statement::GenericFor(namelist, explist, block) => {
                 // TODO use closing value (explist[4])
                 let control = Value::String(namelist.first().unwrap().clone());
-                let _state = if let Some(exp) = explist.get(1) {
+                let state = if let Some(exp) = explist.get(1) {
                     exp.clone()
                 } else {
                     Expression::Nil
@@ -520,8 +505,6 @@ impl Statement {
                 };
                 lua.env.locals.push(Table::new());
                 lua.env.set_local(control, init_val);
-                unimplemented!()
-                /*
                 loop {
                     let vals = Expression::FunctionCall(
                         Box::new(explist.first().unwrap().clone()),
@@ -529,11 +512,40 @@ impl Statement {
                             state.clone(),
                             Expression::Variable(namelist.first().unwrap().clone()),
                         ],
-                    ).eval(lua);
+                    )
+                    .eval(lua);
+                    match vals {
+                        Ok(LuaResult::One(val)) => {
+                            let control = Value::String(namelist.first().unwrap().clone());
+                            lua.env.set_local(control, val);
+                        }
+                        Ok(LuaResult::Many(res)) => {
+                            let mut i = 0;
+                            for (name, val) in namelist.iter().zip(res) {
+                                i += 1;
+                                lua.env.set_local(Value::String(name.clone()), val);
+                            }
+                            while i < namelist.len() {
+                                let name = namelist.get(i).unwrap().clone();
+                                lua.env.set_local(Value::String(name), Value::Nil);
+                                i += 1;
+                            }
+                        }
+                        Err(err) => {
+                            lua.env.locals.pop();
+                            return Err(err);
+                        }
+                    }
+                    let control = Value::String(namelist.first().unwrap().clone());
+                    if let Value::Nil = *lua.env.get(&control) {
+                        lua.env.locals.pop();
+                        return Ok(());
+                    }
+                    if let Err(err) = exec_block(block, lua) {
+                        lua.env.locals.pop();
+                        return Err(err);
+                    }
                 }
-                // lua.env.locals.pop()
-                // Ok(())
-                */
             }
             Statement::NumericalFor(name, start, end, step, block) => {
                 let start = match start.eval(lua) {

@@ -13,12 +13,6 @@ impl Environment {
     pub fn new() -> Environment {
         let mut global = Table::new();
         let _ = global.set(
-            Value::String("print".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::print_,
-            )))),
-        );
-        let _ = global.set(
             Value::String("assert".to_string()),
             Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
                 basic::assert,
@@ -28,6 +22,24 @@ impl Environment {
             Value::String("error".to_string()),
             Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
                 basic::error,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("next".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::next,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("pairs".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::pairs,
+            )))),
+        );
+        let _ = global.set(
+            Value::String("print".to_string()),
+            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+                basic::print_,
             )))),
         );
         let _ = global.set(

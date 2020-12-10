@@ -1,4 +1,6 @@
 use crate::ast::Exception;
+use crate::function::Function;
+use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
 
 pub fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
@@ -31,8 +33,35 @@ pub fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
+pub fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+    // TODO non-numeric indices
+    let table = args.first().unwrap_or(&Value::Nil).clone();
+    let index = match args.get(1) {
+        Some(Value::Nil) => Value::Integer(1),
+        Some(v) => v.add(&Value::Integer(1))?,
+        None => Value::Integer(1),
+    };
+    let value = table.index(&index)?;
+    if value.is_equal(&Value::Nil) {
+        Ok(vec![])
+    } else {
+        Ok(vec![index, value])
+    }
+}
+
+pub fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+    // TODO use __pairs metamethod of available
+    // TODO FIXME
+    Ok(vec![
+        Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+            next,
+        )))),
+        args.first().unwrap_or(&Value::Nil).clone(),
+        Value::Nil,
+    ])
+}
+
 pub fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
-    // TODO
     if let Some(arg) = args.first() {
         print!("{}", arg.tostring());
     }
@@ -78,4 +107,4 @@ pub fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-// TODO ipairs, next, pairs, warn
+// TODO ipairs, warn

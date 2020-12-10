@@ -20,6 +20,7 @@ impl Table {
     pub fn get(&self, key: &Value) -> Option<&Value> {
         self.pairs.get(key)
     }
+    // TODO get_var(&self, key: &str) and set_var(&mut self, key: &str, val: Value)
 
     pub fn set(&mut self, key: Value, val: Value) -> Result<Option<Value>, Exception> {
         // nil and nan key not allowed
