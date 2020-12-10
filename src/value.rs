@@ -1,4 +1,4 @@
-use crate::ast::Exception;
+use crate::ast::{Exception, LuaResult};
 use crate::object::ObjectReference;
 use std::hash::{Hash, Hasher};
 
@@ -43,6 +43,10 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn into_luaresult(self) -> LuaResult {
+        LuaResult::One(self)
+    }
+
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Nil => false,

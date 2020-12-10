@@ -4,6 +4,20 @@ use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::{Float, Value};
 
+pub enum LuaResult {
+    One(Value),
+    Many(Vec<Value>),
+}
+
+impl LuaResult {
+    pub fn first(&self) -> Value {
+        match self {
+            LuaResult::One(val) => val.clone(),
+            LuaResult::Many(vals) => vals.first().unwrap_or(&Value::Nil).clone(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Exception {
     // TODO break
@@ -103,87 +117,167 @@ pub enum Statement {
 }
 
 impl Expression {
-    pub fn eval(&self, lua: &mut Interpreter) -> Result<Value, Exception> {
+    pub fn eval(&self, lua: &mut Interpreter) -> Result<LuaResult, Exception> {
         // println!("\tEVAL {:?}\n", self);
         match self {
-            Expression::Nil => Ok(Value::Nil),
-            Expression::Boolean(b) => Ok(Value::Boolean(*b)),
-            Expression::String(s) => Ok(Value::String(s.clone())),
-            Expression::Integer(n) => Ok(Value::Integer(*n)),
-            Expression::Float(Float(x)) => Ok(Value::Float(Float(*x))),
+            Expression::Nil => Ok(LuaResult::One(Value::Nil)),
+            Expression::Boolean(b) => Ok(LuaResult::One(Value::Boolean(*b))),
+            Expression::String(s) => Ok(LuaResult::One(Value::String(s.clone()))),
+            Expression::Integer(n) => Ok(LuaResult::One(Value::Integer(*n))),
+            Expression::Float(Float(x)) => Ok(LuaResult::One(Value::Float(Float(*x)))),
             // Dot3
-            Expression::Variable(name) => Ok(lua.env.get(&Value::String(name.clone())).clone()),
+            Expression::Variable(name) => Ok(LuaResult::One(
+                lua.env.get(&Value::String(name.clone())).clone(),
+            )),
             // TODO closures?
-            Expression::Function(body) => Ok(Value::Reference(ObjectReference::new(
-                Object::Function(Function::Native(body.clone())),
+            Expression::Function(body) => Ok(LuaResult::One(Value::Reference(
+                ObjectReference::new(Object::Function(Function::Native(body.clone()))),
             ))),
             Expression::Table(fields) => {
                 let mut table = Table::new();
                 for (key, val) in fields {
-                    table.set(key.eval(lua)?, val.eval(lua)?)?;
+                    let key = match key.eval(lua) {
+                        Ok(key) => key.first(),
+                        Err(err) => return Err(err),
+                    };
+                    let val = match val.eval(lua) {
+                        Ok(val) => val.first(),
+                        Err(err) => return Err(err),
+                    };
+                    if let Err(err) = table.set(key, val) {
+                        return Err(err);
+                    }
                 }
-                Ok(Value::Reference(ObjectReference::new(Object::Table(table))))
+                Ok(LuaResult::One(Value::Reference(ObjectReference::new(
+                    Object::Table(table),
+                ))))
             }
             Expression::Binary(left, binop, right) => match binop {
-                BinaryOp::Plus => left.eval(lua)?.add(&right.eval(lua)?),
-                BinaryOp::Minus => left.eval(lua)?.subtract(&right.eval(lua)?),
-                BinaryOp::Star => left.eval(lua)?.multiply(&right.eval(lua)?),
-                BinaryOp::Slash => left.eval(lua)?.float_divide(&right.eval(lua)?),
-                BinaryOp::Slash2 => left.eval(lua)?.floor_divide(&right.eval(lua)?),
-                BinaryOp::Caret => left.eval(lua)?.power(&right.eval(lua)?),
-                BinaryOp::Percent => left.eval(lua)?.modulo(&right.eval(lua)?),
-                BinaryOp::Ampersand => left.eval(lua)?.bitwise_and(&right.eval(lua)?),
-                BinaryOp::Tilde => left.eval(lua)?.bitwise_xor(&right.eval(lua)?),
-                BinaryOp::Pipe => left.eval(lua)?.bitwise_or(&right.eval(lua)?),
-                BinaryOp::GreaterThan2 => left.eval(lua)?.bitwise_right_shift(&right.eval(lua)?),
-                BinaryOp::LessThan2 => left.eval(lua)?.bitwise_left_shift(&right.eval(lua)?),
-                BinaryOp::Dot2 => left.eval(lua)?.concat(&right.eval(lua)?),
-                BinaryOp::LessThan => Ok(Value::Boolean(left.eval(lua)?.is_lt(&right.eval(lua)?))),
-                BinaryOp::LessThanEqual => {
-                    Ok(Value::Boolean(left.eval(lua)?.is_lte(&right.eval(lua)?)))
-                }
-                BinaryOp::GreaterThan => {
-                    Ok(Value::Boolean(right.eval(lua)?.is_lt(&left.eval(lua)?)))
-                }
-                BinaryOp::GreaterThanEqual => {
-                    Ok(Value::Boolean(right.eval(lua)?.is_lte(&left.eval(lua)?)))
-                }
-                BinaryOp::Equal2 => Ok(Value::Boolean(left.eval(lua)?.is_equal(&right.eval(lua)?))),
-                BinaryOp::TildeEqual => {
-                    Ok(Value::Boolean(!left.eval(lua)?.is_equal(&right.eval(lua)?)))
-                }
+                BinaryOp::Plus => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .add(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                // BinaryOp::Plus => left.eval(lua)?.add(&right.eval(lua)?),
+                BinaryOp::Minus => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .subtract(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Star => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .multiply(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Slash => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .float_divide(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Slash2 => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .floor_divide(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Caret => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .power(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Percent => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .modulo(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Ampersand => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .bitwise_and(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Tilde => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .bitwise_xor(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Pipe => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .bitwise_or(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::GreaterThan2 => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .bitwise_right_shift(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::LessThan2 => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .bitwise_left_shift(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::Dot2 => Ok(left
+                    .eval(lua)?
+                    .first()
+                    .concat(&right.eval(lua)?.first())?
+                    .into_luaresult()),
+                BinaryOp::LessThan => Ok(LuaResult::One(Value::Boolean(
+                    left.eval(lua)?.first().is_lt(&right.eval(lua)?.first()),
+                ))),
+                BinaryOp::LessThanEqual => Ok(LuaResult::One(Value::Boolean(
+                    left.eval(lua)?.first().is_lte(&right.eval(lua)?.first()),
+                ))),
+                BinaryOp::GreaterThan => Ok(LuaResult::One(Value::Boolean(
+                    right.eval(lua)?.first().is_lt(&left.eval(lua)?.first()),
+                ))),
+                BinaryOp::GreaterThanEqual => Ok(LuaResult::One(Value::Boolean(
+                    right.eval(lua)?.first().is_lte(&left.eval(lua)?.first()),
+                ))),
+                BinaryOp::Equal2 => Ok(LuaResult::One(Value::Boolean(
+                    left.eval(lua)?.first().is_equal(&right.eval(lua)?.first()),
+                ))),
+                BinaryOp::TildeEqual => Ok(LuaResult::One(Value::Boolean(
+                    !left.eval(lua)?.first().is_equal(&right.eval(lua)?.first()),
+                ))),
                 BinaryOp::And => {
-                    let left = left.eval(lua)?;
+                    let left = match left.eval(lua) {
+                        Ok(val) => val.first(),
+                        Err(err) => return Err(err),
+                    };
                     if !left.is_truthy() {
-                        Ok(left)
+                        Ok(LuaResult::One(left))
                     } else {
                         Ok(right.eval(lua)?)
                     }
                 }
                 BinaryOp::Or => {
-                    let left = left.eval(lua)?;
+                    let left = match left.eval(lua) {
+                        Ok(val) => val.first(),
+                        Err(err) => return Err(err),
+                    };
                     if left.is_truthy() {
-                        Ok(left)
+                        Ok(LuaResult::One(left))
                     } else {
                         Ok(right.eval(lua)?)
                     }
                 }
             },
             Expression::Unary(unop, exp) => {
-                let val = exp.eval(lua)?;
+                let val = match exp.eval(lua) {
+                    Ok(val) => val.first(),
+                    Err(err) => return Err(err),
+                };
                 match unop {
                     UnaryOp::Minus => match val {
-                        Value::Integer(n) => Ok(Value::Integer(-n)),
-                        Value::Float(Float(x)) => Ok(Value::Float(Float(-x))),
+                        Value::Integer(n) => Ok(LuaResult::One(Value::Integer(-n))),
+                        Value::Float(Float(x)) => Ok(LuaResult::One(Value::Float(Float(-x)))),
                         _ => Err(Exception::RuntimeError(
                             "invalid attempt to perform arithmetic",
                         )),
                     },
-                    UnaryOp::Not => Ok(Value::Boolean(!val.is_truthy())),
+                    UnaryOp::Not => Ok(LuaResult::One(Value::Boolean(!val.is_truthy()))),
                     UnaryOp::Hash => match val {
-                        Value::String(s) => Ok(Value::Integer(s.len() as i64)), // should be no longer than max i64
+                        Value::String(s) => Ok(LuaResult::One(Value::Integer(s.len() as i64))), // should be no longer than max i64
                         Value::Reference(ObjectReference(o)) => match &*o.borrow() {
-                            Object::Table(t) => Ok(Value::Integer(t.size())),
+                            Object::Table(t) => Ok(LuaResult::One(Value::Integer(t.size()))),
                             _ => unimplemented!(),
                         },
                         _ => Err(Exception::RuntimeError("invalid attempt to get length")),
@@ -191,7 +285,7 @@ impl Expression {
                     UnaryOp::Tilde => {
                         // TODO if float can be converted to integer, do it
                         if let Value::Integer(x) = val {
-                            Ok(Value::Integer(!x))
+                            Ok(LuaResult::One(Value::Integer(!x)))
                         } else {
                             Err(Exception::RuntimeError(
                                 "invalid attempt to perform bitwise operation",
@@ -201,15 +295,22 @@ impl Expression {
                 }
             }
             Expression::Index(left, right) => {
-                let (left, right) = (left.eval(lua)?, right.eval(lua)?);
+                let left = match left.eval(lua) {
+                    Ok(val) => val.first(),
+                    Err(err) => return Err(err),
+                };
+                let right = match right.eval(lua) {
+                    Ok(val) => val.first(),
+                    Err(err) => return Err(err),
+                };
                 match left {
                     Value::String(_) => unimplemented!("index string value"),
                     Value::Reference(ObjectReference(o)) => match &*o.borrow() {
                         Object::Table(t) => {
                             if let Some(val) = t.get(&right) {
-                                Ok(val.clone())
+                                Ok(LuaResult::One(val.clone()))
                             } else {
-                                Ok(Value::Nil)
+                                Ok(LuaResult::One(Value::Nil))
                             }
                         }
                         Object::UserData => unimplemented!(),
@@ -224,9 +325,15 @@ impl Expression {
                 // TODO callable tables
                 let mut vals = Vec::new();
                 for arg in args {
-                    vals.push(arg.eval(lua)?);
+                    vals.push(match arg.eval(lua) {
+                        Ok(arg) => arg.first(), // TODO multiple return values from last arg
+                        Err(err) => return Err(err),
+                    });
                 }
-                let func = func.eval(lua)?;
+                let func = match func.eval(lua) {
+                    Ok(val) => val.first(),
+                    Err(err) => return Err(err),
+                };
                 let func_ref = match func {
                     Value::Reference(ObjectReference(o)) => o,
                     _ => return Err(Exception::RuntimeError("invalid attempt to call a value")),
@@ -237,12 +344,11 @@ impl Expression {
                 } else {
                     return Err(Exception::RuntimeError("invalid attempt to call a value"));
                 };
-                let result = f.call(lua, vals)?;
-                if let Some(val) = result.first() {
-                    Ok(val.clone())
-                } else {
-                    Ok(Value::Nil)
-                }
+                let result = match f.call(lua, vals) {
+                    Ok(result) => LuaResult::Many(result),
+                    Err(err) => return Err(err),
+                };
+                Ok(LuaResult::One(result.first())) // TODO multiple return values
             }
             _ => unimplemented!(),
         }
@@ -256,7 +362,10 @@ impl Statement {
             Statement::Assign(vars, exps) => {
                 let mut vals = Vec::new();
                 for (_, exp) in vars.iter().zip(exps) {
-                    vals.push(exp.eval(lua)?);
+                    vals.push(match exp.eval(lua) {
+                        Ok(val) => val.first(), // TODO Multiple return values
+                        Err(err) => return Err(err),
+                    });
                 }
                 while vals.len() < vars.len() {
                     vals.push(Value::Nil);
@@ -267,10 +376,18 @@ impl Statement {
                             lua.env.set(Value::String(name.clone()), val);
                         }
                         Expression::Index(left, right) => {
-                            if let Value::Reference(ObjectReference(o)) = left.eval(lua)? {
+                            let left = match left.eval(lua) {
+                                Ok(val) => val.first(),
+                                Err(err) => return Err(err),
+                            };
+                            let right = match right.eval(lua) {
+                                Ok(val) => val.first(),
+                                Err(err) => return Err(err),
+                            };
+                            if let Value::Reference(ObjectReference(o)) = left {
                                 // only table can be indexed in this context?
                                 if let Object::Table(t) = &mut *o.borrow_mut() {
-                                    let _ = t.set(right.eval(lua)?, val);
+                                    let _ = t.set(right, val);
                                 } else {
                                     return Err(Exception::RuntimeError(
                                         "invalid attempt to index a value",
@@ -292,7 +409,10 @@ impl Statement {
             Statement::Declare(atts, exps) => {
                 let mut vals = Vec::new();
                 for (_, exp) in atts.iter().zip(exps) {
-                    vals.push(exp.eval(lua)?);
+                    vals.push(match exp.eval(lua) {
+                        Ok(val) => val.first(), // TODO Multiple return values
+                        Err(err) => return Err(err),
+                    });
                 }
                 while vals.len() < atts.len() {
                     vals.push(Value::Nil);
@@ -319,7 +439,7 @@ impl Statement {
                 loop {
                     match exp.eval(lua) {
                         Ok(cond) => {
-                            if !cond.is_truthy() {
+                            if !cond.first().is_truthy() {
                                 break;
                             }
                         }
@@ -339,31 +459,73 @@ impl Statement {
             Statement::Return(exps) => {
                 let mut vals = Vec::new();
                 for exp in exps {
-                    vals.push(exp.eval(lua)?);
+                    vals.push(match exp.eval(lua) {
+                        Ok(val) => val.first(), // TODO multiple return values (from last argument?)
+                        Err(err) => return Err(err),
+                    });
                 }
                 Err(Exception::Return(vals))
             }
-            // GenericFor(Vec<String>, Vec<Expression>, Block),
+            Statement::GenericFor(namelist, explist, _block) => {
+                // TODO use closing value (explist[4])
+                let control = Value::String(namelist.first().unwrap().clone());
+                let _state = if let Some(exp) = explist.get(1) {
+                    exp.clone()
+                } else {
+                    Expression::Nil
+                };
+                let init_val = if let Some(exp) = explist.get(2) {
+                    match exp.eval(lua) {
+                        Ok(val) => val.first(),
+                        Err(err) => return Err(err),
+                    }
+                } else {
+                    Value::Nil
+                };
+                lua.env.locals.push(Table::new());
+                lua.env.set_local(control, init_val);
+                unimplemented!()
+                /*
+                loop {
+                    let vals = Expression::FunctionCall(
+                        Box::new(explist.first().unwrap().clone()),
+                        vec![
+                            state.clone(),
+                            Expression::Variable(namelist.first().unwrap().clone()),
+                        ],
+                    ).eval(lua);
+                }
+                // lua.env.locals.pop()
+                // Ok(())
+                */
+            }
             Statement::NumericalFor(name, start, end, step, block) => {
                 let start = match start.eval(lua) {
-                    Ok(Value::Integer(n)) => Value::Integer(n),
-                    Ok(Value::Float(Float(x))) => Value::Float(Float(x)),
-                    Ok(_) => {
+                    Ok(val) => val.first(),
+                    Err(err) => return Err(err),
+                };
+                let start = match start {
+                    Value::Integer(n) => Value::Integer(n),
+                    Value::Float(Float(x)) => Value::Float(Float(x)),
+                    _ => {
                         return Err(Exception::RuntimeError(
                             "bad 'for' initial value (number expected)",
                         ))
                     }
-                    Err(err) => return Err(err),
                 };
                 let end = match end.eval(lua) {
-                    Ok(Value::Integer(n)) => Value::Integer(n),
-                    Ok(Value::Float(Float(x))) => Value::Float(Float(x)),
-                    Ok(_) => {
-                        return Err(Exception::RuntimeError("bad 'for' limit (number expected)"))
-                    }
+                    Ok(val) => val.first(),
                     Err(err) => return Err(err),
                 };
-                let step = step.eval(lua)?;
+                let end = match end {
+                    Value::Integer(n) => Value::Integer(n),
+                    Value::Float(Float(x)) => Value::Float(Float(x)),
+                    _ => return Err(Exception::RuntimeError("bad 'for' limit (number expected)")),
+                };
+                let step = match step.eval(lua) {
+                    Ok(step) => step.first(),
+                    Err(err) => return Err(err),
+                };
                 let binop = match step {
                     Value::Integer(0) => return Err(Exception::RuntimeError("'for' step is zero")),
                     Value::Integer(n) => {
@@ -394,7 +556,10 @@ impl Statement {
                 lua.env
                     .set_local(Value::String(name.clone()), start.clone());
                 loop {
-                    let i = Expression::Variable(name.clone()).eval(lua).unwrap();
+                    let i = Expression::Variable(name.clone())
+                        .eval(lua)
+                        .unwrap()
+                        .first();
                     match binop {
                         BinaryOp::LessThanEqual => {
                             if !i.is_lte(&end) {
@@ -427,7 +592,7 @@ impl Statement {
             Statement::If(exp, then_block, else_block) => {
                 lua.env.locals.push(Table::new());
                 // TODO pop stack before propagating Err from exp.eval?
-                let result = if exp.eval(lua)?.is_truthy() {
+                let result = if exp.eval(lua)?.first().is_truthy() {
                     exec_block(then_block, lua)
                 } else {
                     exec_block(else_block, lua)
