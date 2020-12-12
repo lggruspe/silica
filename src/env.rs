@@ -1,6 +1,4 @@
 use crate::basic;
-use crate::function::Function;
-use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::Value;
 
@@ -11,59 +9,12 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Environment {
-        let mut global = Table::new();
-        let _ = global.set(
-            Value::String("assert".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::assert,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("error".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::error,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("next".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::next,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("pairs".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::pairs,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("print".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::print_,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("tonumber".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::tonumber,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("tostring".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::tostring,
-            )))),
-        );
-        let _ = global.set(
-            Value::String("type".to_string()),
-            Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
-                basic::type_,
-            )))),
-        );
-        Environment {
-            global,
+        let mut env = Environment {
+            global: Table::new(),
             locals: vec![],
-        }
+        };
+        basic::import_into(&mut env);
+        env
     }
 
     pub fn get(&self, name: &Value) -> &Value {

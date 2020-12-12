@@ -1,4 +1,5 @@
 use crate::ast::Exception;
+use crate::env::Environment;
 use crate::function::Function;
 use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
@@ -105,6 +106,27 @@ pub fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     } else {
         Ok(vec![Value::String(Value::Nil.type_str().to_string())])
     }
+}
+
+fn function_object(func: fn(Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+    Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
+        func,
+    ))))
+}
+
+fn insert(env: &mut Environment, name: &'static str, val: Value) {
+    env.set(Value::String(name.to_string()), val);
+}
+
+pub fn import_into(env: &mut Environment) {
+    insert(env, "assert", function_object(assert));
+    insert(env, "error", function_object(error));
+    insert(env, "next", function_object(next));
+    insert(env, "pairs", function_object(pairs));
+    insert(env, "print", function_object(print_));
+    insert(env, "tonumber", function_object(tonumber));
+    insert(env, "tostring", function_object(tostring));
+    insert(env, "type", function_object(type_));
 }
 
 // TODO ipairs, warn
