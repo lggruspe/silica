@@ -8,5 +8,3 @@ pub mod object;
 pub mod parser;
 pub mod table;
 pub mod value;
-
-pub mod nenv;

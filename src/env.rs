@@ -1,50 +1,58 @@
-use crate::basic;
 use crate::table::Table;
 use crate::value::Value;
+use std::ptr;
 
 pub struct Environment {
-    pub global: Table,
-    pub locals: Vec<Table>,
+    pub variables: Table,
+    pub parent: *mut Environment,
 }
 
 impl Environment {
     pub fn new() -> Environment {
-        let mut env = Environment {
-            global: Table::new(),
-            locals: vec![],
-        };
-        basic::import_into(&mut env);
-        env
-    }
-
-    pub fn get(&self, name: &Value) -> &Value {
-        for local in self.locals.iter().rev() {
-            if let Some(val) = local.get(name) {
-                return val;
-            }
+        Environment {
+            variables: Table::new(),
+            parent: ptr::null_mut(),
         }
-        self.global.get(name).unwrap_or(&Value::Nil)
     }
 
-    pub fn set(&mut self, name: Value, val: Value) {
-        // find value and insert if found, otherwise insert in global
-        for i in (0..self.locals.len()).rev() {
-            let local = self.locals.get_mut(i);
-            if let Some(local) = local {
-                if local.get(&name).is_some() {
-                    let _ = local.set(name, val);
-                    return;
-                }
-            }
+    pub fn local(&mut self) -> Environment {
+        Environment {
+            variables: Table::new(),
+            parent: self,
         }
-        let _ = self.global.set(name, val);
     }
 
-    pub fn set_local(&mut self, name: Value, val: Value) {
-        if let Some(local) = self.locals.last_mut() {
-            let _ = local.set(name, val);
+    pub fn get(&self, key: &Value) -> Value {
+        if let Some(val) = self.variables.get(key) {
+            val.clone()
+        } else if self.parent.is_null() {
+            Value::Nil
         } else {
-            let _ = self.global.set(name, val);
+            let val;
+            unsafe {
+                val = (*self.parent).get(key);
+            }
+            val
         }
+    }
+
+    pub fn set_local(&mut self, key: Value, val: Value) {
+        let _ = self.variables.set(key, val);
+    }
+
+    pub fn set(&mut self, key: Value, val: Value) {
+        if let Some(_) = self.variables.get(&key) {
+            self.set_local(key, val);
+        } else if self.parent.is_null() {
+            self.set_local(key, val);
+        } else {
+            unsafe {
+                (*self.parent).set(key, val);
+            }
+        }
+    }
+
+    pub fn activate<F: Fn(Environment) -> T, T>(&mut self, callback: F) -> T {
+        callback(self.local())
     }
 }

@@ -448,35 +448,24 @@ impl Statement {
             Statement::Empty => Ok(()),
             Statement::Break => unimplemented!(),
             // Goto(String),
-            Statement::Do(block) => {
-                lua.env.locals.push(Table::new());
-                let result = exec_block(block, lua);
-                lua.env.locals.pop();
-                result?;
-                Ok(())
-            }
-            Statement::While(exp, block) => {
-                lua.env.locals.push(Table::new());
+            Statement::Do(block) => lua
+                .env
+                .activate(|env| exec_block(block, &mut Interpreter::from(env))),
+            Statement::While(exp, block) => lua.env.activate(|env| {
+                let mut lua = Interpreter::from(env);
                 loop {
-                    match exp.eval(lua) {
+                    match exp.eval(&mut lua) {
                         Ok(cond) => {
                             if !cond.first().is_truthy() {
-                                break;
+                                return Ok(());
+                            } else {
+                                exec_block(block, &mut lua)?;
                             }
                         }
-                        Err(err) => {
-                            lua.env.locals.pop();
-                            return Err(err);
-                        }
-                    }
-                    if let Err(err) = exec_block(block, lua) {
-                        lua.env.locals.pop();
-                        return Err(err);
+                        Err(err) => return Err(err),
                     }
                 }
-                lua.env.locals.pop();
-                Ok(())
-            }
+            }),
             Statement::Return(exps) => {
                 let mut vals = Vec::new();
                 for exp in exps {
@@ -489,63 +478,60 @@ impl Statement {
             }
             Statement::GenericFor(namelist, explist, block) => {
                 // TODO use closing value (explist[4])
-                let control = Value::String(namelist.first().unwrap().clone());
                 let state = if let Some(exp) = explist.get(1) {
                     exp.clone()
                 } else {
                     Expression::Nil
                 };
-                let init_val = if let Some(exp) = explist.get(2) {
-                    match exp.eval(lua) {
-                        Ok(val) => val.first(),
-                        Err(err) => return Err(err),
-                    }
-                } else {
-                    Value::Nil
-                };
-                lua.env.locals.push(Table::new());
-                lua.env.set_local(control, init_val);
-                loop {
-                    let vals = Expression::FunctionCall(
-                        Box::new(explist.first().unwrap().clone()),
-                        vec![
-                            state.clone(),
-                            Expression::Variable(namelist.first().unwrap().clone()),
-                        ],
-                    )
-                    .eval(lua);
-                    match vals {
-                        Ok(LuaResult::One(val)) => {
-                            let control = Value::String(namelist.first().unwrap().clone());
-                            lua.env.set_local(control, val);
+                lua.env.activate(|env| {
+                    let mut lua = Interpreter::from(env);
+                    let control = Value::String(namelist.first().unwrap().clone());
+                    let init_val = if let Some(exp) = explist.get(2) {
+                        match exp.eval(&mut lua) {
+                            Ok(val) => val.first(),
+                            Err(err) => return Err(err),
                         }
-                        Ok(LuaResult::Many(res)) => {
-                            let mut i = 0;
-                            for (name, val) in namelist.iter().zip(res) {
-                                i += 1;
-                                lua.env.set_local(Value::String(name.clone()), val);
+                    } else {
+                        Value::Nil
+                    };
+                    lua.env.set_local(control, init_val);
+                    loop {
+                        let vals = Expression::FunctionCall(
+                            Box::new(explist.first().unwrap().clone()),
+                            vec![
+                                state.clone(),
+                                Expression::Variable(namelist.first().unwrap().clone()),
+                            ],
+                        )
+                        .eval(&mut lua);
+                        match vals {
+                            Ok(LuaResult::One(val)) => {
+                                let control = Value::String(namelist.first().unwrap().clone());
+                                lua.env.set_local(control, val);
                             }
-                            while i < namelist.len() {
-                                let name = namelist.get(i).unwrap().clone();
-                                lua.env.set_local(Value::String(name), Value::Nil);
-                                i += 1;
+                            Ok(LuaResult::Many(res)) => {
+                                let mut i = 0;
+                                for (name, val) in namelist.iter().zip(res) {
+                                    i += 1;
+                                    lua.env.set_local(Value::String(name.clone()), val);
+                                }
+                                while i < namelist.len() {
+                                    let name = namelist.get(i).unwrap().clone();
+                                    lua.env.set_local(Value::String(name), Value::Nil);
+                                    i += 1;
+                                }
                             }
+                            Err(err) => return Err(err),
                         }
-                        Err(err) => {
-                            lua.env.locals.pop();
+                        let control = Value::String(namelist.first().unwrap().clone());
+                        if let Value::Nil = lua.env.get(&control) {
+                            return Ok(());
+                        }
+                        if let Err(err) = exec_block(block, &mut lua) {
                             return Err(err);
                         }
                     }
-                    let control = Value::String(namelist.first().unwrap().clone());
-                    if let Value::Nil = *lua.env.get(&control) {
-                        lua.env.locals.pop();
-                        return Ok(());
-                    }
-                    if let Err(err) = exec_block(block, lua) {
-                        lua.env.locals.pop();
-                        return Err(err);
-                    }
-                }
+                })
             }
             Statement::NumericalFor(name, start, end, step, block) => {
                 let start = match start.eval(lua) {
@@ -600,55 +586,50 @@ impl Statement {
                     }
                     (start, step) => (start.to_float(), step.to_float(), end.to_float()),
                 };
-                lua.env.locals.push(Table::new());
-                lua.env
-                    .set_local(Value::String(name.clone()), start.clone());
-                loop {
-                    let i = Expression::Variable(name.clone())
-                        .eval(lua)
-                        .unwrap()
-                        .first();
-                    match binop {
-                        BinaryOp::LessThanEqual => {
-                            if !i.is_lte(&end) {
-                                break;
+                lua.env.activate(|env| {
+                    let mut lua = Interpreter::from(env);
+                    lua.env
+                        .set_local(Value::String(name.clone()), start.clone());
+                    loop {
+                        let i = Expression::Variable(name.clone())
+                            .eval(&mut lua)
+                            .unwrap()
+                            .first();
+                        match binop {
+                            BinaryOp::LessThanEqual => {
+                                if !i.is_lte(&end) {
+                                    break;
+                                }
                             }
-                        }
-                        BinaryOp::GreaterThanEqual => {
-                            if i.is_lt(&end) {
-                                break;
+                            BinaryOp::GreaterThanEqual => {
+                                if i.is_lt(&end) {
+                                    break;
+                                }
                             }
+                            _ => panic!(),
                         }
-                        _ => panic!(),
-                    }
-                    if let Err(err) = exec_block(block, lua) {
-                        lua.env.locals.pop();
-                        return Err(err);
-                    }
-                    let i = match i.add(&step) {
-                        Ok(i) => i,
-                        Err(e) => {
-                            lua.env.locals.pop();
-                            return Err(e);
+                        if let Err(err) = exec_block(block, &mut lua) {
+                            return Err(err);
                         }
-                    };
-                    lua.env.set_local(Value::String(name.clone()), i);
-                }
-                lua.env.locals.pop();
-                Ok(())
+                        let i = match i.add(&step) {
+                            Ok(i) => i,
+                            Err(e) => {
+                                return Err(e);
+                            }
+                        };
+                        lua.env.set_local(Value::String(name.clone()), i);
+                    }
+                    Ok(())
+                })
             }
-            Statement::If(exp, then_block, else_block) => {
-                lua.env.locals.push(Table::new());
-                // TODO pop stack before propagating Err from exp.eval?
-                let result = if exp.eval(lua)?.first().is_truthy() {
-                    exec_block(then_block, lua)
+            Statement::If(exp, then_block, else_block) => lua.env.activate(|env| {
+                let mut lua = Interpreter::from(env);
+                if exp.eval(&mut lua)?.first().is_truthy() {
+                    exec_block(then_block, &mut lua)
                 } else {
-                    exec_block(else_block, lua)
-                };
-                lua.env.locals.pop();
-                result?;
-                Ok(())
-            }
+                    exec_block(else_block, &mut lua)
+                }
+            }),
             // Label(String),
             Statement::FunctionCall(func, args) => {
                 match Expression::FunctionCall(Box::new(func.clone()), args.clone()).eval(lua) {

@@ -1,6 +1,5 @@
 use crate::ast::{exec_block, Exception, FunctionBody};
 use crate::interpreter::Interpreter;
-use crate::table::Table;
 use crate::value::Value;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -19,13 +18,14 @@ impl Callable for Function {
         match self {
             Function::Native(func) => {
                 let FunctionBody(params, block) = func;
-                lua.env.locals.push(Table::new());
-                // TODO make sure params don't depend on other params
-                for (param, arg) in params.iter().zip(args) {
-                    lua.env.set_local(Value::String(param.clone()), arg);
-                }
-                let result = exec_block(&block, lua);
-                lua.env.locals.pop();
+                let result = lua.env.activate(|env| {
+                    let mut lua = Interpreter::from(env);
+                    // TODO make sure params don't depend on other params
+                    for (param, arg) in params.iter().zip(&args) {
+                        lua.env.set_local(Value::String(param.clone()), arg.clone());
+                    }
+                    exec_block(&block, &mut lua)
+                });
                 match result {
                     Ok(()) => Ok(vec![Value::Nil]),
                     Err(Exception::RuntimeError(msg)) => Err(Exception::RuntimeError(msg)),

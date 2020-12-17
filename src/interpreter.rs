@@ -1,3 +1,4 @@
+use crate::basic;
 use crate::env::Environment;
 
 pub struct Interpreter {
@@ -6,8 +7,12 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {
-            env: Environment::new(),
-        }
+        let mut env = Environment::new();
+        basic::import_into(&mut env);
+        Interpreter { env }
+    }
+
+    pub fn from(env: Environment) -> Interpreter {
+        Interpreter { env }
     }
 }
