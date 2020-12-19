@@ -132,7 +132,10 @@ impl Expression {
             )),
             // TODO closures?
             Expression::Function(body) => Ok(LuaResult::One(Value::Reference(
-                ObjectReference::new(Object::Function(Function::Native(body.clone()))),
+                ObjectReference::new(Object::Function(Function::Native {
+                    body: body.clone(),
+                    parent: &mut lua.env,
+                })),
             ))),
             Expression::Table(fields) => {
                 let mut table = Table::new();
