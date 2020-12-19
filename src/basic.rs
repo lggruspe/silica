@@ -51,8 +51,7 @@ pub fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 }
 
 pub fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
-    // TODO use __pairs metamethod of available
-    // TODO FIXME
+    // TODO use __pairs metamethod if available
     Ok(vec![
         Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
             next,

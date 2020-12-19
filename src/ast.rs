@@ -1,4 +1,4 @@
-use crate::function::{Callable, Function};
+use crate::function::Function;
 use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::table::Table;
@@ -87,6 +87,25 @@ pub fn exec_block(block: &Block, lua: &mut Interpreter) -> Result<(), Exception>
         stat.exec(lua)?;
     }
     Ok(())
+}
+
+pub fn eval_list(list: &Vec<Expression>, lua: &mut Interpreter) -> Result<LuaResult, Exception> {
+    let count = list.len();
+    if count == 0 {
+        Ok(LuaResult::One(Value::Nil))
+    } else {
+        let mut vals = Vec::new();
+        for exp in list.iter().take(count - 1) {
+            vals.push(exp.eval(lua)?.first());
+        }
+        if let Some(last) = list.last() {
+            match last.eval(lua)? {
+                LuaResult::One(val) => vals.push(val),
+                LuaResult::Many(many) => vals.append(&mut many.clone()),
+            }
+        }
+        Ok(LuaResult::Many(vals))
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -311,46 +330,16 @@ impl Expression {
             }
             Expression::FunctionCall(func, args) => {
                 // TODO callable tables
-                let count = max(1, args.len());
-                let mut i = 1;
-                let mut vals = Vec::new();
-                for arg in args {
-                    if i != count {
-                        vals.push(match arg.eval(lua) {
-                            Ok(arg) => arg.first(),
-                            Err(err) => return Err(err),
-                        });
-                    } else {
-                        match arg.eval(lua) {
-                            Ok(LuaResult::One(val)) => vals.push(val),
-                            Ok(LuaResult::Many(val)) => vals.append(&mut val.clone()),
-                            Err(err) => return Err(err),
-                        }
-                    }
-                    i += 1;
-                }
+                let vals = match eval_list(args, lua) {
+                    Ok(LuaResult::One(val)) => vec![val],
+                    Ok(LuaResult::Many(vals)) => vals,
+                    Err(err) => return Err(err),
+                };
                 let func = match func.eval(lua) {
                     Ok(val) => val.first(),
                     Err(err) => return Err(err),
                 };
-                let func_ref = match func {
-                    Value::Reference(ObjectReference(o)) => o,
-                    _ => return Err(Exception::RuntimeError("invalid attempt to call a value")),
-                };
-                let func_ref = func_ref.borrow();
-                let f = if let Object::Function(f) = &*func_ref {
-                    f
-                } else {
-                    return Err(Exception::RuntimeError("invalid attempt to call a value"));
-                };
-                match f.call(lua, vals) {
-                    Ok(res) => match res.len() {
-                        0 => Ok(LuaResult::One(Value::Nil)),
-                        1 => Ok(LuaResult::One(res.first().unwrap().clone())),
-                        _ => Ok(LuaResult::Many(res)),
-                    },
-                    Err(err) => Err(err),
-                }
+                func.call(lua, vals)
             }
             _ => unimplemented!(),
         }
@@ -480,39 +469,29 @@ impl Statement {
                 Err(Exception::Return(vals))
             }
             Statement::GenericFor(namelist, explist, block) => {
-                // TODO use closing value (explist[4])
-                let state = if let Some(exp) = explist.get(1) {
-                    exp.clone()
-                } else {
-                    Expression::Nil
-                };
+                // TODO use closing value (explist[3])
                 lua.env.activate(|env| {
                     let mut lua = Interpreter::from(env);
-                    let control = Value::String(namelist.first().unwrap().clone());
-                    let init_val = if let Some(exp) = explist.get(2) {
-                        match exp.eval(&mut lua) {
-                            Ok(val) => val.first(),
-                            Err(err) => return Err(err),
-                        }
-                    } else {
-                        Value::Nil
-                    };
-                    lua.env.set_local(control, init_val);
+                    let mut list = match eval_list(explist, &mut lua)? {
+                        LuaResult::One(val) => vec![val],
+                        LuaResult::Many(vals) => vals,
+                    }; // [iter, state, initial value of control variable, closing value]
+                    while list.len() < 4 {
+                        list.push(Value::Nil);
+                    }
+                    let control_name = Value::String(namelist.first().unwrap().clone());
+                    lua.env
+                        .set_local(control_name.clone(), list.get(2).unwrap().clone());
+                    let iter = list.first().unwrap();
                     loop {
-                        let vals = Expression::FunctionCall(
-                            Box::new(explist.first().unwrap().clone()),
-                            vec![
-                                state.clone(),
-                                Expression::Variable(namelist.first().unwrap().clone()),
-                            ],
-                        )
-                        .eval(&mut lua);
+                        let control = lua.env.get(&control_name);
+                        let state = list.get(1).unwrap_or(&Value::Nil).clone();
+                        let vals = iter.call(&mut lua, vec![state, control])?;
                         match vals {
-                            Ok(LuaResult::One(val)) => {
-                                let control = Value::String(namelist.first().unwrap().clone());
-                                lua.env.set_local(control, val);
+                            LuaResult::One(val) => {
+                                lua.env.set_local(control_name.clone(), val);
                             }
-                            Ok(LuaResult::Many(res)) => {
+                            LuaResult::Many(res) => {
                                 let mut i = 0;
                                 for (name, val) in namelist.iter().zip(res) {
                                     i += 1;
@@ -524,13 +503,10 @@ impl Statement {
                                     i += 1;
                                 }
                             }
-                            Err(err) => return Err(err),
                         }
-                        let control = Value::String(namelist.first().unwrap().clone());
-                        if let Value::Nil = lua.env.get(&control) {
+                        if let Value::Nil = lua.env.get(&control_name) {
                             return Ok(());
-                        }
-                        if let Err(err) = exec_block(block, &mut lua) {
+                        } else if let Err(err) = exec_block(block, &mut lua) {
                             return Err(err);
                         }
                     }

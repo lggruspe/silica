@@ -1,4 +1,6 @@
 use crate::ast::{Exception, LuaResult};
+use crate::function::Callable;
+use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use std::hash::{Hash, Hasher};
 
@@ -324,6 +326,27 @@ impl Value {
             Value::Integer(n) => Value::Float(Float(*n as f64)),
             Value::Float(_) => self.clone(),
             _ => panic!(),
+        }
+    }
+
+    pub fn call(&self, lua: &mut Interpreter, args: Vec<Value>) -> Result<LuaResult, Exception> {
+        let func_ref = match self {
+            Value::Reference(ObjectReference(o)) => o,
+            _ => return Err(Exception::RuntimeError("invalid attempt to call a value")),
+        };
+        let func_ref = func_ref.borrow();
+        let f = if let Object::Function(f) = &*func_ref {
+            f
+        } else {
+            return Err(Exception::RuntimeError("invalid attempt to call a value"));
+        };
+        match f.call(lua, args) {
+            Ok(res) => match res.len() {
+                0 => Ok(LuaResult::One(Value::Nil)),
+                1 => Ok(LuaResult::One(res.first().unwrap().clone())),
+                _ => Ok(LuaResult::Many(res)),
+            },
+            Err(err) => Err(err),
         }
     }
 }
