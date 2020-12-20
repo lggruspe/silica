@@ -4,7 +4,7 @@ use crate::function::Function;
 use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
 
-pub fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let val = args.first().unwrap_or(&Value::Nil);
     if val.is_truthy() {
         Ok(vec![val.clone()])
@@ -18,7 +18,7 @@ pub fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-pub fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO error(message, [level]): use level
     match args.first() {
         Some(Value::Integer(n)) => Err(Exception::UserError(Value::Integer(*n))),
@@ -34,7 +34,7 @@ pub fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-pub fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO non-numeric indices
     let table = args.first().unwrap_or(&Value::Nil).clone();
     let index = match args.get(1) {
@@ -50,7 +50,7 @@ pub fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-pub fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO use __pairs metamethod if available
     Ok(vec![
         Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
@@ -61,7 +61,7 @@ pub fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     ])
 }
 
-pub fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if let Some(arg) = args.first() {
         print!("{}", arg.tostring());
     }
@@ -72,7 +72,7 @@ pub fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     Ok(vec![Value::Nil])
 }
 
-pub fn tonumber(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tonumber(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO tonumber(e [, base])
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
@@ -90,7 +90,7 @@ pub fn tonumber(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-pub fn tostring(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tostring(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO use __tostring or __name metamethods
     if let Some(v) = args.first() {
         Ok(vec![Value::String(v.tostring())])
@@ -99,7 +99,7 @@ pub fn tostring(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-pub fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if let Some(v) = args.first() {
         Ok(vec![Value::String(v.type_str().to_string())])
     } else {

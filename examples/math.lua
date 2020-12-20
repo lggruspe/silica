@@ -1,0 +1,6 @@
+print(math.abs(4.5))
+print(math.abs(-4.5))
+print(math.abs(0))
+print(math.abs(-0.0))
+print(math.abs(3))
+print(math.abs(-3))

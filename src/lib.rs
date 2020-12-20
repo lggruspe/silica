@@ -8,3 +8,6 @@ pub mod object;
 pub mod parser;
 pub mod table;
 pub mod value;
+
+// Libraries
+pub mod math;
