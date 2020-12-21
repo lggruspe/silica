@@ -190,9 +190,12 @@ impl Value {
         }
     }
 
-    pub fn index(&self, other: &Value) -> Result<Value, Exception> {
+    pub fn index(&self, other: &Value, lua: &mut Interpreter) -> Result<Value, Exception> {
         match self {
-            Value::String(_) => unimplemented!("index string value"),
+            Value::String(_) => {
+                let string = lua.env.get(&Value::String("string".to_string()));
+                string.index(other, lua)
+            }
             Value::Reference(ObjectReference(o)) => match &*o.borrow() {
                 Object::Table(t) => {
                     if let Some(val) = t.get(other) {

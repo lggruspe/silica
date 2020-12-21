@@ -208,7 +208,9 @@ fn type_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>
 
 // TODO ult
 
-fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(
+    func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>,
+) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))

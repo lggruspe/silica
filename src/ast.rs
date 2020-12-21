@@ -326,7 +326,7 @@ impl Expression {
                     Ok(val) => val.first(),
                     Err(err) => return Err(err),
                 };
-                Ok(left.index(&right)?.into_luaresult())
+                Ok(left.index(&right, lua)?.into_luaresult())
             }
             Expression::FunctionCall(func, args) => {
                 // TODO callable tables

@@ -11,12 +11,18 @@ fn byte(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> 
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
         Some(Value::String(s)) => s.clone(),
-        _ => return Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => {
+            return Err(Exception::UserError(Value::String(
+                "bad argument #1 (string expected)".to_string(),
+            )))
+        }
     };
     let start = if let Value::Integer(n) = args.get(1).unwrap_or(&Value::Integer(1)).to_integer() {
         n
     } else {
-        return Err(Exception::UserError(Value::String("bad argument #2 (number expected)".to_string())));
+        return Err(Exception::UserError(Value::String(
+            "bad argument #2 (number expected)".to_string(),
+        )));
     };
     let n = string.len() as i64;
     let end = match args.get(2) {
@@ -26,7 +32,9 @@ fn byte(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> 
             if let Value::Integer(n) = val.to_integer() {
                 n
             } else {
-                return Err(Exception::UserError(Value::String("bad argument #3 (number expected)".to_string())));
+                return Err(Exception::UserError(Value::String(
+                    "bad argument #3 (number expected)".to_string(),
+                )));
             }
         }
     };
@@ -58,11 +66,14 @@ fn byte(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> 
 fn char_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let n = args.len();
     let mut string = String::new();
-    for (i, arg) in (1..n+1).zip(args) {
+    for (i, arg) in (1..n + 1).zip(args) {
         if let Value::Integer(n) = arg.to_integer() {
             string.push(n as u8 as char);
         } else {
-            return Err(Exception::UserError(Value::String(format!("bad argument #{} (number has no integer representation)", i))));
+            return Err(Exception::UserError(Value::String(format!(
+                "bad argument #{} (number has no integer representation)",
+                i
+            ))));
         }
     }
     Ok(vec![Value::String(string)])
@@ -80,7 +91,9 @@ fn len(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(n.to_string().len() as i64)]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::Integer(x.to_string().len() as i64)]),
         Some(Value::String(s)) => Ok(vec![Value::Integer(s.len() as i64)]),
-        _ => Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string())))
+        _ => Err(Exception::UserError(Value::String(
+            "bad argument #1 (string expected)".to_string(),
+        ))),
     }
 }
 
@@ -89,7 +102,9 @@ fn lower(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>
         Some(Value::Integer(n)) => Ok(vec![Value::String(n.to_string())]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::String(x.to_string())]),
         Some(Value::String(s)) => Ok(vec![Value::String(s.to_lowercase())]),
-        _ => Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => Err(Exception::UserError(Value::String(
+            "bad argument #1 (string expected)".to_string(),
+        ))),
     }
 }
 
@@ -100,12 +115,18 @@ fn rep(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
         Some(Value::String(s)) => s.clone(),
-        _ => return Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => {
+            return Err(Exception::UserError(Value::String(
+                "bad argument #1 (string expected)".to_string(),
+            )))
+        }
     };
     if let Value::Integer(n) = args.get(1).unwrap_or(&Value::Nil).to_integer() {
         Ok(vec![Value::String(string.repeat(n as usize))])
     } else {
-        Err(Exception::UserError(Value::String("bad argument #2 (number expected)".to_string())))
+        Err(Exception::UserError(Value::String(
+            "bad argument #2 (number expected)".to_string(),
+        )))
     }
 }
 
@@ -114,7 +135,11 @@ fn reverse(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exceptio
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
         Some(Value::String(s)) => s.clone(),
-        _ => return Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => {
+            return Err(Exception::UserError(Value::String(
+                "bad argument #1 (string expected)".to_string(),
+            )))
+        }
     };
     Ok(vec![Value::String(string.chars().rev().collect())])
 }
@@ -124,12 +149,18 @@ fn sub(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
         Some(Value::String(s)) => s.clone(),
-        _ => return Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => {
+            return Err(Exception::UserError(Value::String(
+                "bad argument #1 (string expected)".to_string(),
+            )))
+        }
     };
     let start = if let Value::Integer(n) = args.get(1).unwrap_or(&Value::Nil).to_integer() {
         n
     } else {
-        return Err(Exception::UserError(Value::String("bad argument #2 (number expected)".to_string())));
+        return Err(Exception::UserError(Value::String(
+            "bad argument #2 (number expected)".to_string(),
+        )));
     };
     let n = string.len() as i64;
     let end = match args.get(2) {
@@ -139,7 +170,9 @@ fn sub(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
             if let Value::Integer(n) = val.to_integer() {
                 n
             } else {
-                return Err(Exception::UserError(Value::String("bad argument #3 (number expected)".to_string())));
+                return Err(Exception::UserError(Value::String(
+                    "bad argument #3 (number expected)".to_string(),
+                )));
             }
         }
     };
@@ -175,11 +208,15 @@ fn upper(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>
         Some(Value::Integer(n)) => Ok(vec![Value::String(n.to_string())]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::String(x.to_string())]),
         Some(Value::String(s)) => Ok(vec![Value::String(s.to_uppercase())]),
-        _ => Err(Exception::UserError(Value::String("bad argument #1 (string expected)".to_string()))),
+        _ => Err(Exception::UserError(Value::String(
+            "bad argument #1 (string expected)".to_string(),
+        ))),
     }
 }
 
-fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(
+    func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>,
+) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))
@@ -189,15 +226,21 @@ pub fn import_into(env: &mut Environment) {
     let mut string = Table::new();
     let _ = string.set(Value::String("byte".to_string()), function_object(byte));
     let _ = string.set(Value::String("char".to_string()), function_object(char_));
-    let _ = string.set(Value::String("format".to_string()), function_object(format_));
+    let _ = string.set(
+        Value::String("format".to_string()),
+        function_object(format_),
+    );
     let _ = string.set(Value::String("len".to_string()), function_object(len));
     let _ = string.set(Value::String("lower".to_string()), function_object(lower));
     let _ = string.set(Value::String("rep".to_string()), function_object(rep));
-    let _ = string.set(Value::String("reverse".to_string()), function_object(reverse));
+    let _ = string.set(
+        Value::String("reverse".to_string()),
+        function_object(reverse),
+    );
     let _ = string.set(Value::String("sub".to_string()), function_object(sub));
     let _ = string.set(Value::String("upper".to_string()), function_object(upper));
     env.set(
         Value::String("string".to_string()),
-        Value::Reference(ObjectReference::new(Object::Table(string)))
+        Value::Reference(ObjectReference::new(Object::Table(string))),
     );
 }

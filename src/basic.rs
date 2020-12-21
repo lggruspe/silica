@@ -35,7 +35,7 @@ fn error(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>
     }
 }
 
-fn next(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn next(lua: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO non-numeric indices
     let table = args.first().unwrap_or(&Value::Nil).clone();
     let index = match args.get(1) {
@@ -43,7 +43,11 @@ fn next(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> 
         Some(v) => v.add(&Value::Integer(1))?,
         None => Value::Integer(1),
     };
-    let value = table.index(&index)?;
+    let value;
+    unsafe {
+        let lua = lua.as_mut().unwrap();
+        value = table.index(&index, lua)?;
+    }
     if value.is_equal(&Value::Nil) {
         Ok(vec![])
     } else {
@@ -108,7 +112,9 @@ fn type_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception>
     }
 }
 
-fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(
+    func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>,
+) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))
