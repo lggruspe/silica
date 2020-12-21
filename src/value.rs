@@ -349,4 +349,13 @@ impl Value {
             Err(err) => Err(err),
         }
     }
+
+    pub fn to_integer(&self) -> Value {
+        match self {
+            Value::Integer(n) => Value::Integer(*n),
+            Value::Float(Float(_)) => unimplemented!(),
+            Value::String(_) => unimplemented!(),
+            _ => Value::Nil,
+        }
+    }
 }
