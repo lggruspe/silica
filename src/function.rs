@@ -9,7 +9,7 @@ pub enum Function {
         body: FunctionBody,
         parent: *mut Environment, // parent environment at function declaration
     },
-    Foreign(fn(Vec<Value>) -> Result<Vec<Value>, Exception>),
+    Foreign(fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>),
     // TODO Other callable types (e.g. callable tables?)
 }
 
@@ -18,7 +18,7 @@ pub trait Callable {
 }
 
 impl Callable for Function {
-    fn call(&self, _: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+    fn call(&self, lua: &mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
         match self {
             Function::Native { body, parent } => {
                 let env: &mut Environment;
@@ -41,7 +41,7 @@ impl Callable for Function {
                     Err(Exception::UserError(msg)) => Err(Exception::UserError(msg)),
                 }
             }
-            Function::Foreign(func) => func(args),
+            Function::Foreign(func) => func(lua, args),
         }
     }
 }

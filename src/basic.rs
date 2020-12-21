@@ -1,10 +1,11 @@
 use crate::ast::Exception;
 use crate::env::Environment;
 use crate::function::Function;
+use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
 
-fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn assert(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let val = args.first().unwrap_or(&Value::Nil);
     if val.is_truthy() {
         Ok(vec![val.clone()])
@@ -18,7 +19,7 @@ fn assert(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn error(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO error(message, [level]): use level
     match args.first() {
         Some(Value::Integer(n)) => Err(Exception::UserError(Value::Integer(*n))),
@@ -34,7 +35,7 @@ fn error(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn next(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO non-numeric indices
     let table = args.first().unwrap_or(&Value::Nil).clone();
     let index = match args.get(1) {
@@ -50,7 +51,7 @@ fn next(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn pairs(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO use __pairs metamethod if available
     Ok(vec![
         Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
@@ -61,7 +62,7 @@ fn pairs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     ])
 }
 
-fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn print_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if let Some(arg) = args.first() {
         print!("{}", arg.tostring());
     }
@@ -72,7 +73,7 @@ fn print_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     Ok(vec![Value::Nil])
 }
 
-fn tonumber(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tonumber(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO tonumber(e [, base])
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
@@ -90,7 +91,7 @@ fn tonumber(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn tostring(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tostring(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO use __tostring or __name metamethods
     if let Some(v) = args.first() {
         Ok(vec![Value::String(v.tostring())])
@@ -99,7 +100,7 @@ fn tostring(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn type_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if let Some(v) = args.first() {
         Ok(vec![Value::String(v.type_str().to_string())])
     } else {
@@ -107,17 +108,19 @@ fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn function_object(func: fn(Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))
 }
 
-fn insert(env: &mut Environment, name: &'static str, val: Value) {
-    env.set(Value::String(name.to_string()), val);
+fn insert(env: *mut Environment, name: &'static str, val: Value) {
+    unsafe {
+        (*env).set(Value::String(name.to_string()), val);
+    }
 }
 
-pub fn import_into(env: &mut Environment) {
+pub fn import_into(env: *mut Environment) {
     insert(env, "assert", function_object(assert));
     insert(env, "error", function_object(error));
     insert(env, "next", function_object(next));

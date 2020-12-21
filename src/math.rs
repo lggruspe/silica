@@ -1,13 +1,14 @@
 use crate::ast::Exception;
 use crate::env::Environment;
 use crate::function::Function;
+use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::{Float, Value};
 
 // TODO check casts
 
-fn abs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn abs(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             if let Some(m) = n.checked_abs() {
@@ -23,7 +24,7 @@ fn abs(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn acos(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn acos(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let n = *n;
@@ -41,7 +42,7 @@ fn acos(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn asin(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn asin(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let n = *n;
@@ -61,7 +62,7 @@ fn asin(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO atan
 
-fn ceil(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn ceil(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::Float(Float(x.ceil()))]),
@@ -71,7 +72,7 @@ fn ceil(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn cos(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn cos(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let x = *n as f64;
@@ -84,7 +85,7 @@ fn cos(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn deg(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn deg(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let x = *n as f64;
@@ -97,7 +98,7 @@ fn deg(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn exp(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn exp(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let x = *n as f64;
@@ -110,7 +111,7 @@ fn exp(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn floor(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn floor(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::Float(Float(x.floor()))]),
@@ -123,7 +124,7 @@ fn floor(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 // TODO fmod
 // TODO log(x [, base])
 
-fn max(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn max(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if args.is_empty() {
         Err(Exception::UserError(Value::String(
             "bad argument #1 (value expected)".to_string(),
@@ -139,7 +140,7 @@ fn max(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn min(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn min(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     if args.is_empty() {
         Err(Exception::UserError(Value::String(
             "bad argument #1 (value expected)".to_string(),
@@ -157,7 +158,7 @@ fn min(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO modf, random, randomseed
 
-fn sin(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn sin(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let x = *n as f64;
@@ -170,7 +171,7 @@ fn sin(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn tan(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tan(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => {
             let x = *n as f64;
@@ -183,7 +184,7 @@ fn tan(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn tointeger(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn tointeger(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
         Some(Value::String(_)) => unimplemented!(),
@@ -194,7 +195,7 @@ fn tointeger(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn type_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(_)) => Ok(vec![Value::String("integer".to_string())]),
         Some(Value::Float(_)) => Ok(vec![Value::String("float".to_string())]),
@@ -207,7 +208,7 @@ fn type_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO ult
 
-fn function_object(func: fn(Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))

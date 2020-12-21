@@ -1,11 +1,12 @@
 use crate::ast::Exception;
 use crate::env::Environment;
 use crate::function::Function;
+use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::table::Table;
 use crate::value::{Float, Value};
 
-fn byte(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn byte(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let string = match args.first() {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
@@ -54,7 +55,7 @@ fn byte(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     Ok(vec![Value::String(String::from(&string[start..end]))])
 }
 
-fn char_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn char_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let n = args.len();
     let mut string = String::new();
     for (i, arg) in (1..n+1).zip(args) {
@@ -69,11 +70,11 @@ fn char_(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO dump, find, gmatch, gsub
 
-fn format_(_args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn format_(_: *mut Interpreter, _args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     unimplemented!()
 }
 
-fn len(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn len(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // NOTE should count \0s
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(n.to_string().len() as i64)]),
@@ -83,7 +84,7 @@ fn len(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn lower(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn lower(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::String(n.to_string())]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::String(x.to_string())]),
@@ -94,7 +95,7 @@ fn lower(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO match, pack, packsize
 
-fn rep(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn rep(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let string = match args.first() {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
@@ -108,7 +109,7 @@ fn rep(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn reverse(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn reverse(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let string = match args.first() {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
@@ -118,7 +119,7 @@ fn reverse(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     Ok(vec![Value::String(string.chars().rev().collect())])
 }
 
-fn sub(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn sub(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     let string = match args.first() {
         Some(Value::Integer(n)) => n.to_string(),
         Some(Value::Float(Float(x))) => x.to_string(),
@@ -169,7 +170,7 @@ fn sub(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 // TODO unpack
 
-fn upper(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+fn upper(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::String(n.to_string())]),
         Some(Value::Float(Float(x))) => Ok(vec![Value::String(x.to_string())]),
@@ -178,7 +179,7 @@ fn upper(args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     }
 }
 
-fn function_object(func: fn(Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
+fn function_object(func: fn(*mut Interpreter, Vec<Value>) -> Result<Vec<Value>, Exception>) -> Value {
     Value::Reference(ObjectReference::new(Object::Function(Function::Foreign(
         func,
     ))))
