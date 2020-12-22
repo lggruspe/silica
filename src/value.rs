@@ -1,8 +1,10 @@
 use crate::ast::{Exception, LuaResult};
+use crate::basic::tonumber;
 use crate::function::Callable;
 use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use std::hash::{Hash, Hasher};
+use std::ptr::null_mut;
 
 /// Integer overflow should cause the value to wrap around 2C-style.
 /// Strings are immutable.
@@ -356,8 +358,18 @@ impl Value {
     pub fn to_integer(&self) -> Value {
         match self {
             Value::Integer(n) => Value::Integer(*n),
-            Value::Float(Float(_)) => unimplemented!(),
-            Value::String(_) => unimplemented!(),
+            Value::Float(Float(x)) => {
+                if x.fract() == 0.0 {
+                    Value::Integer(x.round() as i64)
+                } else {
+                    Value::Nil
+                }
+            }
+            Value::String(s) => tonumber(null_mut(), vec![Value::String(s.clone())])
+                .unwrap()
+                .first()
+                .unwrap()
+                .to_integer(),
             _ => Value::Nil,
         }
     }

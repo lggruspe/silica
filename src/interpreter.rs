@@ -2,6 +2,7 @@ use crate::basic;
 use crate::env::Environment;
 use crate::math;
 use crate::string;
+use crate::table;
 
 pub struct Interpreter {
     pub env: Environment,
@@ -13,6 +14,7 @@ impl Interpreter {
         basic::import_into(&mut env);
         math::import_into(&mut env);
         string::import_into(&mut env);
+        table::import_into(&mut env);
         Interpreter { env }
     }
 

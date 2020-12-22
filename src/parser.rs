@@ -10,7 +10,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
         let mut parser = Parser {
-            scanner: scanner,
+            scanner,
             current: None,
         };
         Parser::advance(&mut parser);
@@ -309,15 +309,15 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             let block = parse_block(parser)?;
             if let Some(Token::End) = parser.current() {
                 parser.advance();
-                return Ok(Statement::NumericalFor(
+                Ok(Statement::NumericalFor(
                     namelist[0].clone(),
                     start,
                     end,
                     step,
                     block,
-                ));
+                ))
             } else {
-                return Err(SyntaxError("expected 'end' (to close 'for')")); // expected end
+                Err(SyntaxError("expected 'end' (to close 'for')")) // expected end
             }
         }
         Some(Token::In) => {
@@ -328,12 +328,12 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                 let block = parse_block(parser)?;
                 if let Some(Token::End) = parser.current() {
                     parser.advance();
-                    return Ok(Statement::GenericFor(namelist, explist, block));
+                    Ok(Statement::GenericFor(namelist, explist, block))
                 } else {
-                    return Err(SyntaxError("expected 'end' (to close 'for')"));
+                    Err(SyntaxError("expected 'end' (to close 'for')"))
                 }
             } else {
-                return Err(SyntaxError("expected 'do'"));
+                Err(SyntaxError("expected 'do'"))
             }
         }
         _ => Err(SyntaxError("expected '=', or 'in'")), // or ','?
@@ -590,12 +590,12 @@ fn parse_exp_operand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
             return Ok(Expression::Boolean(true));
         }
         Some(Token::Integer(value)) => {
-            let value = value.clone();
+            let value = *value;
             parser.advance();
             return Ok(Expression::Integer(value));
         }
         Some(Token::Float(value)) => {
-            let value = value.clone();
+            let value = *value;
             parser.advance();
             return Ok(Expression::Float(Float(value)));
         }
@@ -924,13 +924,12 @@ fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
         Ok(Field(Some(left), right))
     } else if let Ok(exp) = parse_exp(parser) {
         if let Expression::Variable(name) = exp {
-            let name = name.clone();
             if let Some(Token::Equal) = parser.current() {
                 parser.advance();
                 let exp = parse_exp(parser)?;
-                return Ok(Field(Some(Expression::String(name)), exp));
+                Ok(Field(Some(Expression::String(name)), exp))
             } else {
-                return Ok(Field(None, Expression::Variable(name)));
+                Ok(Field(None, Expression::Variable(name)))
             }
         } else {
             Ok(Field(None, exp))
@@ -1002,12 +1001,12 @@ fn parse_attrib(parser: &mut Parser) -> Result<Option<String>, SyntaxError> {
         parser.advance();
         if let Some(Token::GreaterThan) = parser.current() {
             parser.advance();
-            return Ok(Some(name));
+            Ok(Some(name))
         } else {
-            return Err(SyntaxError("expected '>' (to close '<')"));
+            Err(SyntaxError("expected '>' (to close '<')"))
         }
     } else {
-        return Err(SyntaxError("expected identifier"));
+        Err(SyntaxError("expected identifier"))
     }
 }
 

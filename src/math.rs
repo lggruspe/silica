@@ -186,11 +186,9 @@ fn tan(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
 
 fn tointeger(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     match args.first() {
-        Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),
-        Some(Value::String(_)) => unimplemented!(),
-        Some(Value::Float(_)) => unimplemented!(),
+        Some(v) => Ok(vec![v.to_integer()]),
         _ => Err(Exception::UserError(Value::String(
-            "bad argument #1 (number expected)".to_string(),
+            "bad argument #1 (value expected)".to_string(),
         ))),
     }
 }

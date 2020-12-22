@@ -171,7 +171,7 @@ fn resume_hex(scanner: &mut Scanner) -> Token {
             break;
         }
     }
-    if points > 1 || digits < 1 || lexeme.starts_with(".") {
+    if points > 1 || digits < 1 || lexeme.starts_with('.') {
         return Token::Error(ScanError::MalformedNumber);
     }
     /*
@@ -357,7 +357,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn peek(&self) -> Option<char> {
-        self.source.clone().nth(0)
+        self.source.clone().next()
     }
 }
 

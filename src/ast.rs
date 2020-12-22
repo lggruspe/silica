@@ -81,7 +81,7 @@ pub enum Expression {
 
 pub type Block = Vec<Statement>;
 
-pub fn exec_block(block: &Block, lua: &mut Interpreter) -> Result<(), Exception> {
+pub fn exec_block(block: &[Statement], lua: &mut Interpreter) -> Result<(), Exception> {
     // NOTE caller should pop the stack before propagating error
     for stat in block {
         stat.exec(lua)?;
@@ -89,7 +89,7 @@ pub fn exec_block(block: &Block, lua: &mut Interpreter) -> Result<(), Exception>
     Ok(())
 }
 
-pub fn eval_list(list: &Vec<Expression>, lua: &mut Interpreter) -> Result<LuaResult, Exception> {
+pub fn eval_list(list: &[Expression], lua: &mut Interpreter) -> Result<LuaResult, Exception> {
     let count = list.len();
     if count == 0 {
         Ok(LuaResult::One(Value::Nil))
@@ -146,9 +146,9 @@ impl Expression {
             Expression::Integer(n) => Ok(LuaResult::One(Value::Integer(*n))),
             Expression::Float(Float(x)) => Ok(LuaResult::One(Value::Float(Float(*x)))),
             // Dot3
-            Expression::Variable(name) => Ok(LuaResult::One(
-                lua.env.get(&Value::String(name.clone())).clone(),
-            )),
+            Expression::Variable(name) => {
+                Ok(LuaResult::One(lua.env.get(&Value::String(name.clone()))))
+            }
             // TODO closures?
             Expression::Function(body) => Ok(LuaResult::One(Value::Reference(
                 ObjectReference::new(Object::Function(Function::Native {

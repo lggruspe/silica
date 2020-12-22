@@ -73,11 +73,11 @@ fn print_(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception
     for arg in args.iter().skip(1) {
         print!("\t{}", arg.tostring());
     }
-    println!("");
+    println!();
     Ok(vec![Value::Nil])
 }
 
-fn tonumber(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
+pub fn tonumber(_: *mut Interpreter, args: Vec<Value>) -> Result<Vec<Value>, Exception> {
     // TODO tonumber(e [, base])
     match args.first() {
         Some(Value::Integer(n)) => Ok(vec![Value::Integer(*n)]),

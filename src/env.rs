@@ -41,9 +41,7 @@ impl Environment {
     }
 
     pub fn set(&mut self, key: Value, val: Value) {
-        if let Some(_) = self.variables.get(&key) {
-            self.set_local(key, val);
-        } else if self.parent.is_null() {
+        if self.variables.get(&key).is_some() || self.parent.is_null() {
             self.set_local(key, val);
         } else {
             unsafe {
