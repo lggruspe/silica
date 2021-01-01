@@ -1,10 +1,8 @@
-use std::str;
-
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token {
-    Name(String), // lexeme
+pub enum Category {
+    Name(String),
 
-    // keywords
+    // Keywords
     And,
     Break,
     Do,
@@ -28,6 +26,7 @@ pub enum Token {
     Until,
     While,
 
+    // Symbols
     Plus,
     Minus,
     Star,
@@ -66,46 +65,68 @@ pub enum Token {
     Integer(i64),
     Float(f64),
     String(String),
+
+    // Special
+    Eof,
     Error(ScanError),
 }
 
+#[derive(Clone, Debug)]
+pub struct Token {
+    pub category: Category,
+    line: u64,
+    column: u64,
+}
+
+impl Default for Token {
+    fn default() -> Token {
+        Token {
+            category: Category::Eof,
+            line: 0,
+            column: 0,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Scanner<'a> {
-    pub source: str::Chars<'a>,
-    pub line_number: u64,
+    source: std::str::Chars<'a>,
+    pub line: u64,
+    column: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScanError {
     InvalidEscape,
     UnexpectedCharacter(char),
-    UnexpectedEOF,
+    UnexpectedEof,
     MalformedNumber,
 }
 
-fn match_keyword(name: &str) -> Option<Token> {
+fn match_keyword(name: &str) -> Option<Category> {
     match name {
-        "and" => Some(Token::And),
-        "break" => Some(Token::Break),
-        "do" => Some(Token::Do),
-        "else" => Some(Token::Else),
-        "elseif" => Some(Token::ElseIf),
-        "end" => Some(Token::End),
-        "false" => Some(Token::False),
-        "for" => Some(Token::For),
-        "function" => Some(Token::Function),
-        "goto" => Some(Token::Goto),
-        "if" => Some(Token::If),
-        "in" => Some(Token::In),
-        "local" => Some(Token::Local),
-        "nil" => Some(Token::Nil),
-        "not" => Some(Token::Not),
-        "or" => Some(Token::Or),
-        "repeat" => Some(Token::Repeat),
-        "return" => Some(Token::Return),
-        "then" => Some(Token::Then),
-        "true" => Some(Token::True),
-        "until" => Some(Token::Until),
-        "while" => Some(Token::While),
+        "and" => Some(Category::And),
+        "break" => Some(Category::Break),
+        "do" => Some(Category::Do),
+        "else" => Some(Category::Else),
+        "elseif" => Some(Category::ElseIf),
+        "end" => Some(Category::End),
+        "false" => Some(Category::False),
+        "for" => Some(Category::For),
+        "function" => Some(Category::Function),
+        "goto" => Some(Category::Goto),
+        "if" => Some(Category::If),
+        "in" => Some(Category::In),
+        "local" => Some(Category::Local),
+        "nil" => Some(Category::Nil),
+        "not" => Some(Category::Not),
+        "or" => Some(Category::Or),
+        "repeat" => Some(Category::Repeat),
+        "return" => Some(Category::Return),
+        "then" => Some(Category::Then),
+        "true" => Some(Category::True),
+        "until" => Some(Category::Until),
+        "while" => Some(Category::While),
         _ => None,
     }
 }
@@ -115,12 +136,14 @@ fn match_name(scanner: &mut Scanner, prefix: char) -> Token {
     let mut name = prefix.to_string();
     while let Some(c) = scanner.peek() {
         if c.is_ascii_alphanumeric() || c == '_' {
-            scanner.advance().map(|a| name.push(a));
+            if let Some(a) = scanner.advance() {
+                name.push(a)
+            }
         } else {
             break;
         }
     }
-    match_keyword(&name).unwrap_or(Token::Name(name))
+    scanner.emit(match_keyword(&name).unwrap_or(Category::Name(name)))
 }
 
 fn match_digits(scanner: &mut Scanner) -> String {
@@ -172,7 +195,7 @@ fn resume_hex(scanner: &mut Scanner) -> Token {
         }
     }
     if points > 1 || digits < 1 || lexeme.starts_with('.') {
-        return Token::Error(ScanError::MalformedNumber);
+        return scanner.emit(Category::Error(ScanError::MalformedNumber));
     }
     /*
     // TODO hex exponents
@@ -184,7 +207,7 @@ fn resume_hex(scanner: &mut Scanner) -> Token {
                 lexeme += &exp;
                 unimplemented!();
             } else {
-                return Token::Error(ScanError::MalformedNumber);
+                return Category::Error(ScanError::MalformedNumber);
             }
         }
     }
@@ -192,7 +215,7 @@ fn resume_hex(scanner: &mut Scanner) -> Token {
     if points == 0 {
         // TODO if value overflows (e.g. 0xffffffffffffffff, it should
         // wrap around to fit into a valid integer)
-        Token::Integer(i64::from_str_radix(&lexeme, 16).unwrap())
+        scanner.emit(Category::Integer(i64::from_str_radix(&lexeme, 16).unwrap()))
     } else {
         unimplemented!()
     }
@@ -241,7 +264,7 @@ fn match_numeral(scanner: &mut Scanner, prefix: char) -> Token {
         }
     }
     if points > 1 || digits < 1 {
-        return Token::Error(ScanError::MalformedNumber);
+        return scanner.emit(Category::Error(ScanError::MalformedNumber));
     }
     if let Some(c) = scanner.peek() {
         if c == 'e' || c == 'E' {
@@ -249,16 +272,16 @@ fn match_numeral(scanner: &mut Scanner, prefix: char) -> Token {
             lexeme.push(c);
             if let Some(exp) = resume_exponent(scanner) {
                 lexeme += &exp;
-                return Token::Float(lexeme.parse().unwrap());
+                return scanner.emit(Category::Float(lexeme.parse().unwrap()));
             } else {
-                return Token::Error(ScanError::MalformedNumber);
+                return scanner.emit(Category::Error(ScanError::MalformedNumber));
             }
         }
     }
     if points == 0 {
-        Token::Integer(lexeme.parse().unwrap())
+        scanner.emit(Category::Integer(lexeme.parse().unwrap()))
     } else {
-        Token::Float(lexeme.parse().unwrap())
+        scanner.emit(Category::Float(lexeme.parse().unwrap()))
     }
 }
 
@@ -279,7 +302,7 @@ fn escaped(c: char) -> Option<char> {
     }
 }
 
-fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
+fn match_string(scanner: &mut Scanner, delim: char) -> Token {
     // assume opening delim has been consumed already
     // short literal strings delimited by single or double quotes
     // can contain '\a' (bell), '\b' (backspace), '\f' (form feed),
@@ -296,14 +319,14 @@ fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
         let c = if let Some(c) = scanner.peek() {
             c
         } else {
-            return Some(Token::Error(ScanError::UnexpectedEOF));
+            return scanner.emit(Category::Error(ScanError::UnexpectedEof));
         };
         if c == delim {
             scanner.advance();
             return if has_invalid_escape {
-                Some(Token::Error(ScanError::InvalidEscape))
+                scanner.emit(Category::Error(ScanError::InvalidEscape))
             } else {
-                Some(Token::String(string))
+                scanner.emit(Category::String(string))
             };
         } else if c != '\\' {
             scanner.advance();
@@ -313,7 +336,7 @@ fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
             match scanner.advance() {
                 // TODO unicode, hex and digits
                 Some('z') => skip_whitespace(scanner),
-                None => return Some(Token::Error(ScanError::UnexpectedEOF)),
+                None => return scanner.emit(Category::Error(ScanError::UnexpectedEof)),
                 Some(e) => {
                     if let Some(a) = escaped(e) {
                         string.push(a);
@@ -327,10 +350,11 @@ fn match_string(scanner: &mut Scanner, delim: char) -> Option<Token> {
 }
 
 impl<'a> Scanner<'a> {
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         let mut scanner = Scanner {
             source: source.chars(),
-            line_number: 1,
+            line: 1,
+            column: 1,
         };
         if scanner.source.as_str().starts_with("#!") {
             skip_line(&mut scanner);
@@ -338,19 +362,28 @@ impl<'a> Scanner<'a> {
         scanner
     }
 
+    fn emit(&mut self, category: Category) -> Token {
+        Token {
+            category,
+            line: self.line,
+            column: self.column,
+        }
+    }
+
     fn advance(&mut self) -> Option<char> {
+        self.column += 1;
         self.source.next()
     }
 
-    fn advance_if_eq_else(&mut self, c: char, a: Token, b: Token) -> Token {
+    fn advance_if_eq_else(&mut self, c: char, a: Category, b: Category) -> Token {
         match self.peek() {
-            None => b,
+            None => self.emit(b),
             Some(p) => {
                 if p == c {
                     self.advance();
-                    a
+                    self.emit(a)
                 } else {
-                    b
+                    self.emit(b)
                 }
             }
         }
@@ -379,7 +412,7 @@ fn skip_whitespace(scanner: &mut Scanner) {
             scanner.advance();
         }
         if lookahead == '\n' {
-            scanner.line_number += 1;
+            scanner.line += 1;
         }
     }
 }
@@ -449,7 +482,7 @@ fn match_long_comment(scanner: &mut Scanner) {
     };
     while let Some(c) = scanner.advance() {
         if c == '\n' {
-            scanner.line_number += 1;
+            scanner.line += 1;
         } else if c == ']' && resume_closing_long_bracket(scanner, level) {
             break;
         }
@@ -464,7 +497,7 @@ fn match_long_comment(scanner: &mut Scanner) {
 // to a simple newline
 // if the opening bracket is followed immediately by a newline,
 // the newline is excluded from the string
-fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Token> {
+fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Category> {
     let checkpoint = scanner.source.clone();
     let level = if let Some(level) = resume_opening_long_bracket(scanner) {
         level
@@ -494,14 +527,14 @@ fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Token> {
     loop {
         match scanner.advance() {
             Some('\n') => {
-                scanner.line_number += 1;
+                scanner.line += 1;
                 if let Some('\r') = scanner.peek() {
                     scanner.advance();
                 }
                 val.push('\n');
             }
             Some('\r') => {
-                scanner.line_number += 1;
+                scanner.line += 1;
                 if let Some('\n') = scanner.peek() {
                     scanner.advance();
                 }
@@ -517,17 +550,17 @@ fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Token> {
             Some(c) => val.push(c),
             None => {
                 scanner.source = checkpoint;
-                return Some(Token::Error(ScanError::UnexpectedEOF));
+                return Some(Category::Error(ScanError::UnexpectedEof));
             }
         }
     }
-    Some(Token::String(val))
+    Some(Category::String(val))
 }
 
 fn skip_line(scanner: &mut Scanner) {
     while let Some(c) = scanner.advance() {
         if c == '\n' {
-            scanner.line_number += 1;
+            scanner.line += 1;
             break;
         }
     }
@@ -555,124 +588,132 @@ fn skip_insignificant(scanner: &mut Scanner) {
     }
 }
 
-impl Iterator for Scanner<'_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Token> {
+impl Scanner<'_> {
+    pub fn next(&mut self) -> Token {
         skip_insignificant(self);
-        let lookahead = self.advance()?;
+        let lookahead = if let Some(c) = self.advance() {
+            c
+        } else {
+            return self.emit(Category::Eof);
+        };
         match lookahead {
-            '+' => Some(Token::Plus),
-            '-' => Some(Token::Minus),
-            '*' => Some(Token::Star),
-            '/' => Some(self.advance_if_eq_else('/', Token::Slash2, Token::Slash)),
-            '%' => Some(Token::Percent),
-            '^' => Some(Token::Caret),
-            '#' => Some(Token::Hash),
-            '&' => Some(Token::Ampersand),
-            '~' => Some(self.advance_if_eq_else('=', Token::TildeEqual, Token::Tilde)),
-            '|' => Some(Token::Pipe),
+            '+' => self.emit(Category::Plus),
+            '-' => self.emit(Category::Minus),
+            '*' => self.emit(Category::Star),
+            '/' => self.advance_if_eq_else('/', Category::Slash2, Category::Slash),
+            '%' => self.emit(Category::Percent),
+            '^' => self.emit(Category::Caret),
+            '#' => self.emit(Category::Hash),
+            '&' => self.emit(Category::Ampersand),
+            '~' => self.advance_if_eq_else('=', Category::TildeEqual, Category::Tilde),
+            '|' => self.emit(Category::Pipe),
             '<' => match self.peek() {
                 Some('=') => {
                     self.advance();
-                    Some(Token::LessThanEqual)
+                    self.emit(Category::LessThanEqual)
                 }
                 Some('<') => {
                     self.advance();
-                    Some(Token::LessThan2)
+                    self.emit(Category::LessThan2)
                 }
-                _ => Some(Token::LessThan),
+                _ => self.emit(Category::LessThan),
             },
             '>' => match self.peek() {
                 Some('=') => {
                     self.advance();
-                    Some(Token::GreaterThanEqual)
+                    self.emit(Category::GreaterThanEqual)
                 }
                 Some('>') => {
                     self.advance();
-                    Some(Token::GreaterThan2)
+                    self.emit(Category::GreaterThan2)
                 }
-                _ => Some(Token::GreaterThan),
+                _ => self.emit(Category::GreaterThan),
             },
-            '=' => Some(self.advance_if_eq_else('=', Token::Equal2, Token::Equal)),
-            '(' => Some(Token::LeftParen),
-            ')' => Some(Token::RightParen),
-            '{' => Some(Token::LeftBrace),
-            '}' => Some(Token::RightBrace),
+            '=' => self.advance_if_eq_else('=', Category::Equal2, Category::Equal),
+            '(' => self.emit(Category::LeftParen),
+            ')' => self.emit(Category::RightParen),
+            '{' => self.emit(Category::LeftBrace),
+            '}' => self.emit(Category::RightBrace),
             '[' => {
                 if let Some(tok) = resume_long_literal_string(self) {
-                    Some(tok)
+                    self.emit(tok)
                 } else {
-                    Some(Token::LeftBracket)
+                    self.emit(Category::LeftBracket)
                 }
             }
-            ']' => Some(Token::RightBracket),
-            ':' => Some(self.advance_if_eq_else(':', Token::Colon2, Token::Colon)),
-            ';' => Some(Token::SemiColon),
-            ',' => Some(Token::Comma),
+            ']' => self.emit(Category::RightBracket),
+            ':' => self.advance_if_eq_else(':', Category::Colon2, Category::Colon),
+            ';' => self.emit(Category::SemiColon),
+            ',' => self.emit(Category::Comma),
 
             // TODO what if number? Ex: .5e-1
             // TODO double check number of symbols consumed '.':
             '.' => match self.peek() {
                 Some('.') => {
                     self.advance();
-                    Some(self.advance_if_eq_else('.', Token::Dot3, Token::Dot2))
+                    self.advance_if_eq_else('.', Category::Dot3, Category::Dot2)
                 }
                 Some(c) => {
                     if c.is_ascii_digit() {
-                        Some(match_numeral(self, '.'))
+                        match_numeral(self, '.')
                     } else {
-                        Some(Token::Dot)
+                        self.emit(Category::Dot)
                     }
                 }
-                _ => Some(Token::Dot),
+                _ => self.emit(Category::Dot),
             },
             '\'' => match_string(self, '\''),
             '"' => match_string(self, '"'),
             _ => {
                 if lookahead.is_ascii_alphabetic() || lookahead == '_' {
-                    Some(match_name(self, lookahead))
+                    match_name(self, lookahead)
                 } else if lookahead.is_ascii_digit() {
-                    Some(match_numeral(self, lookahead))
+                    match_numeral(self, lookahead)
                 } else {
-                    Some(Token::Error(ScanError::UnexpectedCharacter(lookahead)))
+                    self.emit(Category::Error(ScanError::UnexpectedCharacter(lookahead)))
                 }
             }
         }
     }
 }
 
-pub fn scan(source: &str) -> Scanner {
-    Scanner::new(source)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn categories(source: &str) -> Vec<Category> {
+        let mut scanner = Scanner::new(source);
+        let mut cats = Vec::new();
+        loop {
+            let token = scanner.next();
+            if Category::Eof == token.category {
+                return cats;
+            } else {
+                cats.push(token.category);
+            }
+        }
+    }
+
     #[test]
     fn test_match_long_comment() {
-        assert_eq!(
-            scan("--[[test]] 1").collect::<Vec<Token>>(),
-            vec![Token::Integer(1)],
-        )
+        assert_eq!(categories("--[[test]] 1"), vec![Category::Integer(1)],)
     }
 
     #[test]
     fn test_match_numeral() {
         assert_eq!(
-            scan("1 1.0 1e0 1E+0 1e-0 1. .1 1.e-1 .1e0 0x10").collect::<Vec<Token>>(),
+            categories("1 1.0 1e0 1E+0 1e-0 1. .1 1.e-1 .1e0 0x10"),
             vec![
-                Token::Integer(1),
-                Token::Float(1.0),
-                Token::Float(1.0),
-                Token::Float(1.0),
-                Token::Float(1.0),
-                Token::Float(1.0),
-                Token::Float(0.1),
-                Token::Float(0.1),
-                Token::Float(0.1),
-                Token::Integer(16),
+                Category::Integer(1),
+                Category::Float(1.0),
+                Category::Float(1.0),
+                Category::Float(1.0),
+                Category::Float(1.0),
+                Category::Float(1.0),
+                Category::Float(0.1),
+                Category::Float(0.1),
+                Category::Float(0.1),
+                Category::Integer(16),
             ],
         )
     }
@@ -680,8 +721,8 @@ mod tests {
     #[test]
     fn test_match_string() {
         assert_eq!(
-            scan("\"\\abcdefg\\\"\"").collect::<Vec<Token>>(),
-            vec![Token::String("\x07bcdefg\"".to_string()),],
+            categories("\"\\abcdefg\\\"\""),
+            vec![Category::String("\x07bcdefg\"".to_string()),],
         )
     }
 }

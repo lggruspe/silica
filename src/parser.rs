@@ -1,29 +1,30 @@
 use crate::ast::{Argument, BinaryOp, Block, Expression, FunctionBody, Statement, UnaryOp};
-use crate::lex::{Scanner, Token};
+use crate::lex::{Category, Scanner, Token};
 use crate::value::Float;
 
+#[derive(Clone)]
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
-    current: Option<Token>,
+    current: Token,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
         let mut parser = Parser {
             scanner,
-            current: None,
+            current: Token::default(),
         };
         Parser::advance(&mut parser);
         parser
     }
 
-    fn advance(&mut self) -> &Option<Token> {
+    fn advance(&mut self) -> &Token {
         let current = self.scanner.next();
         self.current = current;
         self.current()
     }
 
-    fn current(&self) -> &Option<Token> {
+    fn current(&self) -> &Token {
         &self.current
     }
 }
@@ -37,11 +38,8 @@ pub fn parse(parser: &mut Parser) -> Result<Block, SyntaxError> {
 
 fn parse_chunk(parser: &mut Parser) -> Result<Block, SyntaxError> {
     let block = parse_block(parser);
-    if parser.current().is_none() {
-        block
-    } else {
-        Err(SyntaxError("<eof> expected")) // NOTE is this reachable?
-    }
+    assert_eq!(parser.current().category, Category::Eof, "<eof> expected");
+    block
 }
 
 fn parse_block(parser: &mut Parser) -> Result<Block, SyntaxError> {
@@ -54,8 +52,7 @@ fn parse_block(parser: &mut Parser) -> Result<Block, SyntaxError> {
                 stats.push(stat);
             }
         }
-        // Err(SyntaxError(msg)) => eprintln!("DEBUG {}", msg),
-        _ => (),
+        Err(SyntaxError(_)) => (), // TODO?
     }
 
     if let Ok(stat) = parse_retstat(parser) {
@@ -66,44 +63,44 @@ fn parse_block(parser: &mut Parser) -> Result<Block, SyntaxError> {
 
 fn parse_stat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     // TODO test
-    let result = match parser.current() {
-        Some(Token::SemiColon) => {
+    let result = match parser.current().category {
+        Category::SemiColon => {
             parser.advance();
             Ok(Statement::Empty)
         }
-        Some(Token::Break) => {
+        Category::Break => {
             parser.advance();
             Ok(Statement::Break)
         }
-        Some(Token::Goto) => {
+        Category::Goto => {
             parser.advance();
             cont_goto(parser)
         }
-        Some(Token::Do) => {
+        Category::Do => {
             parser.advance();
             parse_do(parser)
         }
-        Some(Token::While) => {
+        Category::While => {
             parser.advance();
             cont_while(parser)
         }
-        Some(Token::Repeat) => {
+        Category::Repeat => {
             parser.advance();
             cont_repeat(parser)
         }
-        Some(Token::If) => {
+        Category::If => {
             parser.advance();
             cont_if(parser)
         }
-        Some(Token::For) => {
+        Category::For => {
             parser.advance();
             cont_for(parser)
         }
-        Some(Token::Function) => {
+        Category::Function => {
             parser.advance();
             cont_function(parser)
         }
-        Some(Token::Local) => {
+        Category::Local => {
             parser.advance();
             cont_local(parser)
         }
@@ -111,11 +108,9 @@ fn parse_stat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             if let Ok(stat) = parse_label(parser) {
                 return Ok(stat);
             }
-            let source = parser.scanner.source.clone();
-            let line_number = parser.scanner.line_number;
-            let current = parser.current.clone();
+            let backup = parser.clone();
             if let Ok(varlist) = parse_varlist(parser) {
-                if let Some(Token::Equal) = parser.current() {
+                if let Category::Equal = parser.current().category {
                     parser.advance();
                     let explist = parse_explist(parser)?;
                     return Ok(Statement::Assign(varlist, explist));
@@ -123,15 +118,11 @@ fn parse_stat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                     return Err(SyntaxError("expected '='"));
                 }
             } else {
-                parser.scanner.source = source.clone();
-                parser.scanner.line_number = line_number;
-                parser.current = current.clone();
+                *parser = backup.clone();
                 match parse_functioncall(parser) {
                     Ok(stat) => return Ok(stat),
                     Err(err) => {
-                        parser.scanner.source = source;
-                        parser.scanner.line_number = line_number;
-                        parser.current = current;
+                        *parser = backup;
                         return Err(err);
                     }
                 }
@@ -143,19 +134,19 @@ fn parse_stat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             "{:?} {:?} in line {:?}",
             result,
             parser.current(),
-            parser.scanner.line_number
+            parser.scanner.line
         );
     }
     result
 }
 
 fn parse_retstat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    if let Some(Token::Return) = parser.current() {
+    if let Category::Return = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("")); // TODO add error message? or pre-consume 'return'?
     }
-    if let Some(Token::SemiColon) = parser.current() {
+    if let Category::SemiColon = parser.current().category {
         parser.advance();
         return Ok(Statement::Return(vec![Expression::Nil]));
     }
@@ -164,14 +155,14 @@ fn parse_retstat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     } else {
         vec![Expression::Nil]
     };
-    if let Some(Token::SemiColon) = parser.current() {
+    if let Category::SemiColon = parser.current().category {
         parser.advance();
     }
     Ok(Statement::Return(explist))
 }
 
 fn cont_goto(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    if let Some(Token::Name(name)) = parser.current() {
+    if let Category::Name(name) = &parser.current().category {
         let name = name.clone();
         parser.advance();
         Ok(Statement::Goto(name))
@@ -182,7 +173,7 @@ fn cont_goto(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn parse_do(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     let block = parse_block(parser)?;
-    if let Some(Token::End) = parser.current() {
+    if let Category::End = parser.current().category {
         parser.advance();
         Ok(Statement::Do(block))
     } else {
@@ -193,10 +184,10 @@ fn parse_do(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 fn cont_while(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     // TODO test
     let exp = parse_exp(parser)?;
-    if let Some(Token::Do) = parser.current() {
+    if let Category::Do = parser.current().category {
         parser.advance();
         let block = parse_block(parser)?;
-        if let Some(Token::End) = parser.current() {
+        if let Category::End = parser.current().category {
             parser.advance();
             Ok(Statement::While(exp, block))
         } else {
@@ -210,7 +201,7 @@ fn cont_while(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 fn cont_repeat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     // TODO test
     let block = parse_block(parser)?;
-    if let Some(Token::Until) = parser.current() {
+    if let Category::Until = parser.current().category {
         parser.advance();
         let exp = parse_exp(parser)?;
         let mut stat = block.clone();
@@ -223,17 +214,17 @@ fn cont_repeat(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     let exp = parse_exp(parser)?;
-    if let Some(Token::Then) = parser.current() {
+    if let Category::Then = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("expected 'then'"));
     }
     let then = parse_block(parser)?;
     let mut else_ifs = Vec::new();
-    while let Some(Token::ElseIf) = parser.current() {
+    while let Category::ElseIf = parser.current().category {
         parser.advance();
         let exp = parse_exp(parser)?;
-        if let Some(Token::Then) = parser.current() {
+        if let Category::Then = parser.current().category {
             parser.advance();
         } else {
             return Err(SyntaxError("expected 'then'"));
@@ -241,13 +232,13 @@ fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
         let block = parse_block(parser)?;
         else_ifs.push((exp, block));
     }
-    let mut else_block: Block = if let Some(Token::Else) = parser.current() {
+    let mut else_block: Block = if let Category::Else = parser.current().category {
         parser.advance();
         parse_block(parser)?
     } else {
         Vec::new()
     };
-    if let Some(Token::End) = parser.current() {
+    if let Category::End = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("expected 'end' (to close 'if')"));
@@ -261,15 +252,15 @@ fn cont_if(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn parse_namelist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
     let mut names = Vec::new();
-    if let Some(Token::Name(name)) = parser.current() {
+    if let Category::Name(name) = &parser.current().category {
         names.push(name.clone());
         parser.advance();
     } else {
         return Err(SyntaxError("expected identifier"));
     }
-    while let Some(Token::Comma) = parser.current() {
+    while let Category::Comma = parser.current().category {
         parser.advance();
-        if let Some(Token::Name(name)) = parser.current() {
+        if let Category::Name(name) = &parser.current().category {
             names.push(name.clone());
             parser.advance();
         } else {
@@ -282,32 +273,32 @@ fn parse_namelist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
 fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     // TODO
     let namelist = parse_namelist(parser)?;
-    match parser.current() {
-        Some(Token::Equal) => {
+    match parser.current().category {
+        Category::Equal => {
             parser.advance();
             if namelist.len() != 1 {
                 return Err(SyntaxError("")); // TODO add error message
             }
             let start = parse_exp(parser)?;
-            if let Some(Token::Comma) = parser.current() {
+            if let Category::Comma = parser.current().category {
                 parser.advance();
             } else {
                 return Err(SyntaxError("expected ','"));
             }
             let end = parse_exp(parser)?;
-            let step = if let Some(Token::Comma) = parser.current() {
+            let step = if let Category::Comma = parser.current().category {
                 parser.advance();
                 parse_exp(parser)?
             } else {
                 Expression::Integer(1)
             };
-            if let Some(Token::Do) = parser.current() {
+            if let Category::Do = parser.current().category {
                 parser.advance();
             } else {
                 return Err(SyntaxError("expected 'do'"));
             }
             let block = parse_block(parser)?;
-            if let Some(Token::End) = parser.current() {
+            if let Category::End = parser.current().category {
                 parser.advance();
                 Ok(Statement::NumericalFor(
                     namelist[0].clone(),
@@ -320,13 +311,13 @@ fn cont_for(parser: &mut Parser) -> Result<Statement, SyntaxError> {
                 Err(SyntaxError("expected 'end' (to close 'for')")) // expected end
             }
         }
-        Some(Token::In) => {
+        Category::In => {
             parser.advance();
             let explist = parse_explist(parser)?;
-            if let Some(Token::Do) = parser.current() {
+            if let Category::Do = parser.current().category {
                 parser.advance();
                 let block = parse_block(parser)?;
-                if let Some(Token::End) = parser.current() {
+                if let Category::End = parser.current().category {
                     parser.advance();
                     Ok(Statement::GenericFor(namelist, explist, block))
                 } else {
@@ -348,7 +339,7 @@ fn cont_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
             Ok(Statement::Assign(
                 vec![func],
                 vec![Expression::Function(if is_method {
-                    body.to_method()
+                    body.into_method()
                 } else {
                     body
                 })],
@@ -360,7 +351,7 @@ fn cont_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn cont_local_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
     //TODO test
-    if let Some(Token::Name(name)) = parser.current() {
+    if let Category::Name(name) = &parser.current().category {
         let name = name.clone();
         parser.advance();
         let body = parse_funcbody(parser)?;
@@ -375,25 +366,25 @@ fn cont_local_function(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn parse_funcname(parser: &mut Parser) -> Result<(Expression, bool), SyntaxError> {
     // bool is true if function is a method
-    let mut exp = if let Some(Token::Name(name)) = parser.current() {
+    let mut exp = if let Category::Name(name) = &parser.current().category {
         let name = name.clone();
         parser.advance();
         Expression::Variable(name)
     } else {
         return Err(SyntaxError("<name> expected"));
     };
-    while let Some(Token::Dot) = parser.current() {
+    while let Category::Dot = parser.current().category {
         parser.advance();
-        if let Some(Token::Name(name)) = parser.current() {
+        if let Category::Name(name) = &parser.current().category {
             exp = Expression::Index(Box::new(exp), Box::new(Expression::String(name.clone())));
             parser.advance();
         } else {
             return Err(SyntaxError("<name> expected"));
         }
     }
-    if let Some(Token::Colon) = parser.current() {
+    if let Category::Colon = parser.current().category {
         parser.advance();
-        if let Some(Token::Name(name)) = parser.current() {
+        if let Category::Name(name) = &parser.current().category {
             let name = name.clone();
             parser.advance();
             Ok((
@@ -414,7 +405,7 @@ fn parse_exp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_or(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_and(parser)?;
-    while let Some(Token::Or) = parser.current() {
+    while let Category::Or = parser.current().category {
         parser.advance();
         let right = parse_exp_and(parser)?;
         left = Expression::Binary(Box::new(left), BinaryOp::Or, Box::new(right));
@@ -424,7 +415,7 @@ fn parse_exp_or(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_and(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_lessthan(parser)?;
-    while let Some(Token::And) = parser.current() {
+    while let Category::And = parser.current().category {
         parser.advance();
         let right = parse_exp_lessthan(parser)?;
         left = Expression::Binary(Box::new(left), BinaryOp::And, Box::new(right));
@@ -435,13 +426,13 @@ fn parse_exp_and(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_exp_lessthan(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_pipe(parser)?;
     loop {
-        let binop = match parser.current() {
-            Some(Token::LessThan) => BinaryOp::LessThan,
-            Some(Token::GreaterThan) => BinaryOp::GreaterThan,
-            Some(Token::LessThanEqual) => BinaryOp::LessThanEqual,
-            Some(Token::GreaterThanEqual) => BinaryOp::GreaterThanEqual,
-            Some(Token::TildeEqual) => BinaryOp::TildeEqual,
-            Some(Token::Equal2) => BinaryOp::Equal2,
+        let binop = match parser.current().category {
+            Category::LessThan => BinaryOp::LessThan,
+            Category::GreaterThan => BinaryOp::GreaterThan,
+            Category::LessThanEqual => BinaryOp::LessThanEqual,
+            Category::GreaterThanEqual => BinaryOp::GreaterThanEqual,
+            Category::TildeEqual => BinaryOp::TildeEqual,
+            Category::Equal2 => BinaryOp::Equal2,
             _ => break,
         };
         parser.advance();
@@ -453,7 +444,7 @@ fn parse_exp_lessthan(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_pipe(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_tilde(parser)?;
-    while let Some(Token::Pipe) = parser.current() {
+    while let Category::Pipe = parser.current().category {
         parser.advance();
         let right = parse_exp_tilde(parser)?;
         left = Expression::Binary(Box::new(left), BinaryOp::Pipe, Box::new(right));
@@ -464,7 +455,7 @@ fn parse_exp_pipe(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_exp_tilde(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     // TODO test
     let mut left = parse_exp_ampersand(parser)?;
-    while let Some(Token::Tilde) = parser.current() {
+    while let Category::Tilde = parser.current().category {
         parser.advance();
         let right = parse_exp_ampersand(parser)?;
         left = Expression::Binary(Box::new(left), BinaryOp::Tilde, Box::new(right));
@@ -474,7 +465,7 @@ fn parse_exp_tilde(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_ampersand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_lessthan2(parser)?;
-    while let Some(Token::Ampersand) = parser.current() {
+    while let Category::Ampersand = parser.current().category {
         parser.advance();
         let right = parse_exp_lessthan2(parser)?;
         left = Expression::Binary(Box::new(left), BinaryOp::Ampersand, Box::new(right));
@@ -485,9 +476,9 @@ fn parse_exp_ampersand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_exp_lessthan2(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_dot2(parser)?;
     loop {
-        let binop = match parser.current() {
-            Some(Token::LessThan2) => BinaryOp::LessThan2,
-            Some(Token::GreaterThan2) => BinaryOp::GreaterThan2,
+        let binop = match parser.current().category {
+            Category::LessThan2 => BinaryOp::LessThan2,
+            Category::GreaterThan2 => BinaryOp::GreaterThan2,
             _ => break,
         };
         parser.advance();
@@ -499,7 +490,7 @@ fn parse_exp_lessthan2(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_dot2(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let left = parse_exp_plus(parser)?;
-    if let Some(Token::Dot2) = parser.current() {
+    if let Category::Dot2 = parser.current().category {
         parser.advance();
     } else {
         return Ok(left);
@@ -515,9 +506,9 @@ fn parse_exp_dot2(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_exp_plus(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_star(parser)?;
     loop {
-        let binop = match parser.current() {
-            Some(Token::Plus) => BinaryOp::Plus,
-            Some(Token::Minus) => BinaryOp::Minus,
+        let binop = match parser.current().category {
+            Category::Plus => BinaryOp::Plus,
+            Category::Minus => BinaryOp::Minus,
             _ => break,
         };
         parser.advance();
@@ -530,11 +521,11 @@ fn parse_exp_plus(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_exp_star(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let mut left = parse_exp_unary(parser)?;
     loop {
-        let binop = match parser.current() {
-            Some(Token::Star) => BinaryOp::Star,
-            Some(Token::Slash) => BinaryOp::Slash,
-            Some(Token::Slash2) => BinaryOp::Slash2,
-            Some(Token::Percent) => BinaryOp::Percent,
+        let binop = match parser.current().category {
+            Category::Star => BinaryOp::Star,
+            Category::Slash => BinaryOp::Slash,
+            Category::Slash2 => BinaryOp::Slash2,
+            Category::Percent => BinaryOp::Percent,
             _ => break,
         };
         parser.advance();
@@ -545,11 +536,11 @@ fn parse_exp_star(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 }
 
 fn parse_exp_unary(parser: &mut Parser) -> Result<Expression, SyntaxError> {
-    let unop = match parser.current() {
-        Some(Token::Not) => Some(UnaryOp::Not),
-        Some(Token::Hash) => Some(UnaryOp::Hash),
-        Some(Token::Minus) => Some(UnaryOp::Minus),
-        Some(Token::Tilde) => Some(UnaryOp::Tilde),
+    let unop = match parser.current().category {
+        Category::Not => Some(UnaryOp::Not),
+        Category::Hash => Some(UnaryOp::Hash),
+        Category::Minus => Some(UnaryOp::Minus),
+        Category::Tilde => Some(UnaryOp::Tilde),
         _ => None,
     };
     if unop.is_none() {
@@ -562,7 +553,7 @@ fn parse_exp_unary(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_exp_caret(parser: &mut Parser) -> Result<Expression, SyntaxError> {
     let left = parse_exp_operand(parser)?;
-    if let Some(Token::Caret) = parser.current() {
+    if let Category::Caret = parser.current().category {
         parser.advance();
     } else {
         return Ok(left);
@@ -576,35 +567,35 @@ fn parse_exp_caret(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 }
 
 fn parse_exp_operand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
-    match parser.current() {
-        Some(Token::Nil) => {
+    match &parser.current().category {
+        Category::Nil => {
             parser.advance();
             return Ok(Expression::Nil);
         }
-        Some(Token::False) => {
+        Category::False => {
             parser.advance();
             return Ok(Expression::Boolean(false));
         }
-        Some(Token::True) => {
+        Category::True => {
             parser.advance();
             return Ok(Expression::Boolean(true));
         }
-        Some(Token::Integer(value)) => {
+        Category::Integer(value) => {
             let value = *value;
             parser.advance();
             return Ok(Expression::Integer(value));
         }
-        Some(Token::Float(value)) => {
+        Category::Float(value) => {
             let value = *value;
             parser.advance();
             return Ok(Expression::Float(Float(value)));
         }
-        Some(Token::String(value)) => {
+        Category::String(value) => {
             let value = value.clone();
             parser.advance();
             return Ok(Expression::String(value));
         }
-        Some(Token::Dot3) => {
+        Category::Dot3 => {
             parser.advance();
             return Ok(Expression::Dot3);
         }
@@ -623,7 +614,7 @@ fn parse_exp_operand(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 
 fn parse_explist(parser: &mut Parser) -> Result<Vec<Expression>, SyntaxError> {
     let mut exps = vec![parse_exp(parser)?];
-    while let Some(Token::Comma) = parser.current() {
+    while let Category::Comma = parser.current().category {
         parser.advance();
         exps.push(parse_exp(parser)?);
     }
@@ -631,18 +622,18 @@ fn parse_explist(parser: &mut Parser) -> Result<Vec<Expression>, SyntaxError> {
 }
 
 fn parse_funcbody(parser: &mut Parser) -> Result<FunctionBody, SyntaxError> {
-    if let Some(Token::LeftParen) = parser.current() {
+    if let Category::LeftParen = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("'(' expected"));
     }
-    let parlist = if let Some(Token::RightParen) = parser.current() {
+    let parlist = if let Category::RightParen = parser.current().category {
         parser.advance();
         vec![]
     } else {
         match parse_parlist(parser) {
             Ok(parlist) => {
-                if let Some(Token::RightParen) = parser.current() {
+                if let Category::RightParen = parser.current().category {
                     parser.advance();
                 } else {
                     return Err(SyntaxError("expected ')'"));
@@ -653,7 +644,7 @@ fn parse_funcbody(parser: &mut Parser) -> Result<FunctionBody, SyntaxError> {
         }
     };
     let block = parse_block(parser)?; // TODO test parse_block (stack overflow)
-    if let Some(Token::End) = parser.current() {
+    if let Category::End = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("expected 'end' (to close 'function')"));
@@ -662,25 +653,25 @@ fn parse_funcbody(parser: &mut Parser) -> Result<FunctionBody, SyntaxError> {
 }
 
 fn parse_parlist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
-    if let Some(Token::Dot3) = parser.current() {
+    if let Category::Dot3 = parser.current().category {
         parser.advance();
         Ok(vec![String::from("...")])
     } else {
         let mut names = Vec::new();
-        if let Some(Token::Name(name)) = parser.current() {
+        if let Category::Name(name) = &parser.current().category {
             names.push(name.clone());
             parser.advance();
         } else {
             return Err(SyntaxError("expected argument"));
         }
-        while let Some(Token::Comma) = parser.current() {
+        while let Category::Comma = &parser.current().category {
             parser.advance();
-            match parser.current() {
-                Some(Token::Name(name)) => {
+            match &parser.current().category {
+                Category::Name(name) => {
                     names.push(name.clone());
                     parser.advance();
                 }
-                Some(Token::Dot3) => {
+                Category::Dot3 => {
                     parser.advance();
                     names.push("...".to_string());
                     break;
@@ -696,7 +687,7 @@ fn parse_parlist(parser: &mut Parser) -> Result<Vec<String>, SyntaxError> {
 
 fn parse_varlist(parser: &mut Parser) -> Result<Vec<Expression>, SyntaxError> {
     let mut vars = vec![parse_var(parser)?];
-    while let Some(Token::Comma) = parser.current() {
+    while let Category::Comma = parser.current().category {
         parser.advance();
         vars.push(parse_var(parser)?);
     }
@@ -712,19 +703,19 @@ fn parse_functioncall(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 }
 
 fn parse_label(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    if let Some(Token::Colon2) = parser.current() {
+    if let Category::Colon2 = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("")); // TODO add error message? or pre-consume ::?
     }
-    let name = if let Some(Token::Name(name)) = parser.current() {
+    let name = if let Category::Name(name) = &parser.current().category {
         name.clone()
     } else {
         return Err(SyntaxError("expected identifier"));
     };
     parser.advance();
 
-    if let Some(Token::Colon2) = parser.current() {
+    if let Category::Colon2 = parser.current().category {
         parser.advance();
         Ok(Statement::Label(name))
     } else {
@@ -733,18 +724,18 @@ fn parse_label(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 }
 
 fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
-    let mut prefix = match parser.current() {
-        Some(Token::LeftParen) => {
+    let mut prefix = match &parser.current().category {
+        Category::LeftParen => {
             parser.advance();
             let exp = parse_exp(parser)?;
-            if let Some(Token::RightParen) = parser.current() {
+            if let Category::RightParen = parser.current().category {
                 parser.advance();
                 exp
             } else {
                 return Err(SyntaxError("expected expression"));
             }
         }
-        Some(Token::Name(name)) => {
+        Category::Name(name) => {
             let name = name.clone();
             parser.advance();
             Expression::Variable(name)
@@ -754,20 +745,20 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
         }
     };
     loop {
-        match parser.current() {
-            Some(Token::LeftBracket) => {
+        match parser.current().category {
+            Category::LeftBracket => {
                 parser.advance();
                 let exp = parse_exp(parser)?;
-                if let Some(Token::RightBracket) = parser.current() {
+                if let Category::RightBracket = parser.current().category {
                     parser.advance();
                     prefix = Expression::Index(Box::new(prefix), Box::new(exp))
                 } else {
                     return Err(SyntaxError("expected expression"));
                 }
             }
-            Some(Token::Dot) => {
+            Category::Dot => {
                 parser.advance();
-                if let Some(Token::Name(name)) = parser.current() {
+                if let Category::Name(name) = &parser.current().category {
                     let name = name.clone();
                     parser.advance();
                     prefix =
@@ -776,9 +767,9 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
                     return Err(SyntaxError("expected identifier"));
                 }
             }
-            Some(Token::Colon) => {
+            Category::Colon => {
                 parser.advance();
-                if let Some(Token::Name(name)) = parser.current() {
+                if let Category::Name(name) = &parser.current().category {
                     let name = name.clone();
                     parser.advance();
                     let mut args = parse_args(parser)?;
@@ -804,27 +795,27 @@ fn parse_prefixexp(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 }
 
 fn parse_args(parser: &mut Parser) -> Result<Argument, SyntaxError> {
-    match parser.current() {
-        Some(Token::LeftParen) => {
+    match &parser.current().category {
+        Category::LeftParen => {
             parser.advance();
             let explist = if let Ok(explist) = parse_explist(parser) {
                 explist
             } else {
                 vec![]
             };
-            if let Some(Token::RightParen) = parser.current() {
+            if let Category::RightParen = parser.current().category {
                 parser.advance();
             } else {
                 return Err(SyntaxError("expected ')' (to close '(')"));
             }
             Ok(explist)
         }
-        Some(Token::String(value)) => {
+        Category::String(value) => {
             let value = value.clone();
             parser.advance();
             Ok(vec![Expression::String(value)])
         }
-        Some(Token::LeftBrace) => {
+        Category::LeftBrace => {
             let table = parse_tableconstructor(parser)?;
             Ok(vec![Expression::Table(table)])
         }
@@ -843,17 +834,17 @@ fn parse_var(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 fn parse_tableconstructor(
     parser: &mut Parser,
 ) -> Result<Vec<(Expression, Expression)>, SyntaxError> {
-    if let Some(Token::LeftBrace) = parser.current() {
+    if let Category::LeftBrace = parser.current().category {
         parser.advance();
     } else {
         return Err(SyntaxError("")); // TODO add error message? or pre-consume '{'?
     }
-    if let Some(Token::RightBrace) = parser.current() {
+    if let Category::RightBrace = parser.current().category {
         parser.advance();
         return Ok(vec![]);
     }
     let result = parse_fieldlist(parser)?;
-    if let Some(Token::RightBrace) = parser.current() {
+    if let Category::RightBrace = parser.current().category {
         parser.advance();
         Ok(result)
     } else {
@@ -888,18 +879,17 @@ fn parse_fieldlist(parser: &mut Parser) -> Result<Vec<(Expression, Expression)>,
     Ok(fields)
 }
 
-fn parse_fieldsep(parser: &mut Parser) -> Result<Token, SyntaxError> {
-    match parser.current() {
-        Some(Token::Comma) => {
+fn parse_fieldsep(parser: &mut Parser) -> Result<Category, SyntaxError> {
+    match parser.current().category {
+        Category::Comma => {
             parser.advance();
-            Ok(Token::Comma)
+            Ok(Category::Comma)
         }
-        Some(Token::SemiColon) => {
+        Category::SemiColon => {
             parser.advance();
-            Ok(Token::SemiColon)
+            Ok(Category::SemiColon)
         }
-        Some(_) => Err(SyntaxError("expected '}' (to close '{')")),
-        None => Err(SyntaxError("")), // TODO add error message
+        _ => Err(SyntaxError("expected '}' (to close '{')")),
     }
 }
 
@@ -907,15 +897,15 @@ fn parse_fieldsep(parser: &mut Parser) -> Result<Token, SyntaxError> {
 struct Field(pub Option<Expression>, pub Expression); // key, value pair
 
 fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
-    if let Some(Token::LeftBracket) = parser.current() {
+    if let Category::LeftBracket = parser.current().category {
         parser.advance();
         let left = parse_exp(parser)?;
-        if let Some(Token::RightBracket) = parser.current() {
+        if let Category::RightBracket = parser.current().category {
             parser.advance();
         } else {
             return Err(SyntaxError("']' expected"));
         }
-        if let Some(Token::Equal) = parser.current() {
+        if let Category::Equal = parser.current().category {
             parser.advance();
         } else {
             return Err(SyntaxError("expected '='"));
@@ -924,7 +914,7 @@ fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
         Ok(Field(Some(left), right))
     } else if let Ok(exp) = parse_exp(parser) {
         if let Expression::Variable(name) = exp {
-            if let Some(Token::Equal) = parser.current() {
+            if let Category::Equal = parser.current().category {
                 parser.advance();
                 let exp = parse_exp(parser)?;
                 Ok(Field(Some(Expression::String(name)), exp))
@@ -940,7 +930,7 @@ fn parse_field(parser: &mut Parser) -> Result<Field, SyntaxError> {
 }
 
 fn parse_functiondef(parser: &mut Parser) -> Result<Expression, SyntaxError> {
-    if let Some(Token::Function) = parser.current() {
+    if let Category::Function = parser.current().category {
         parser.advance();
         Ok(Expression::Function(parse_funcbody(parser)?)) // TODO Test funcbody
     } else {
@@ -949,11 +939,11 @@ fn parse_functiondef(parser: &mut Parser) -> Result<Expression, SyntaxError> {
 }
 
 fn cont_local(parser: &mut Parser) -> Result<Statement, SyntaxError> {
-    if let Some(Token::Function) = parser.current() {
+    if let Category::Function = parser.current().category {
         parser.advance();
         cont_local_function(parser)
     } else if let Ok(attnamelist) = parse_attnamelist(parser) {
-        if let Some(Token::Equal) = parser.current() {
+        if let Category::Equal = parser.current().category {
             parser.advance();
             let explist = parse_explist(parser)?;
             Ok(Statement::Declare(attnamelist, explist))
@@ -967,15 +957,15 @@ fn cont_local(parser: &mut Parser) -> Result<Statement, SyntaxError> {
 
 fn parse_attnamelist(parser: &mut Parser) -> Result<Vec<(String, Option<String>)>, SyntaxError> {
     let mut attnames = Vec::new();
-    if let Some(Token::Name(name)) = parser.current() {
+    if let Category::Name(name) = &parser.current().category {
         let name = name.clone();
         parser.advance();
 
         let attrib = parse_attrib(parser)?;
         attnames.push((name, attrib));
-        while let Some(Token::Comma) = parser.current() {
+        while let Category::Comma = parser.current().category {
             parser.advance();
-            if let Some(Token::Name(name)) = parser.current() {
+            if let Category::Name(name) = &parser.current().category {
                 let name = name.clone();
                 parser.advance();
                 let attrib = parse_attrib(parser)?;
@@ -991,15 +981,15 @@ fn parse_attnamelist(parser: &mut Parser) -> Result<Vec<(String, Option<String>)
 }
 
 fn parse_attrib(parser: &mut Parser) -> Result<Option<String>, SyntaxError> {
-    if let Some(Token::LessThan) = parser.current() {
+    if let Category::LessThan = parser.current().category {
         parser.advance();
     } else {
         return Ok(None);
     }
-    if let Some(Token::Name(name)) = parser.current() {
+    if let Category::Name(name) = &parser.current().category {
         let name = name.clone();
         parser.advance();
-        if let Some(Token::GreaterThan) = parser.current() {
+        if let Category::GreaterThan = parser.current().category {
             parser.advance();
             Ok(Some(name))
         } else {
@@ -1013,7 +1003,7 @@ fn parse_attrib(parser: &mut Parser) -> Result<Option<String>, SyntaxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lex::{scan, Token};
+    use crate::lex::{Category, Scanner};
     use crate::value::Float;
     use std::fmt::Debug;
 
@@ -1022,7 +1012,7 @@ mod tests {
         src: &str,
         expected: T,
     ) {
-        let mut p = Parser::new(scan(&src));
+        let mut p = Parser::new(Scanner::new(&src));
         if let Ok(out) = f(&mut p) {
             assert_eq!(out, expected);
         } else {
@@ -1033,7 +1023,7 @@ mod tests {
     #[test]
     fn fieldsep() {
         let sources = vec![",", ";"];
-        let outs = vec![Token::Comma, Token::SemiColon];
+        let outs = vec![Category::Comma, Category::SemiColon];
         for (source, out) in sources.iter().zip(outs) {
             check_parse(parse_fieldsep, source, out);
         }

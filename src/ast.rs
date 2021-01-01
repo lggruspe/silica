@@ -101,7 +101,7 @@ pub fn eval_list(list: &[Expression], lua: &mut Interpreter) -> Result<LuaResult
         if let Some(last) = list.last() {
             match last.eval(lua)? {
                 LuaResult::One(val) => vals.push(val),
-                LuaResult::Many(many) => vals.append(&mut many.clone()),
+                LuaResult::Many(mut many) => vals.append(&mut many),
             }
         }
         Ok(LuaResult::Many(vals))
@@ -112,7 +112,7 @@ pub fn eval_list(list: &[Expression], lua: &mut Interpreter) -> Result<LuaResult
 pub struct FunctionBody(pub Vec<String>, pub Block);
 
 impl FunctionBody {
-    pub fn to_method(self) -> FunctionBody {
+    pub fn into_method(self) -> FunctionBody {
         let mut new = self;
         new.0.insert(0, "self".to_string());
         new

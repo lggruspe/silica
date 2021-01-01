@@ -8,6 +8,12 @@ pub struct Interpreter {
     pub env: Environment,
 }
 
+impl Default for Interpreter {
+    fn default() -> Self {
+        Interpreter::new()
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         let mut env = Environment::new();

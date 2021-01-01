@@ -7,6 +7,12 @@ pub struct Environment {
     pub parent: *mut Environment,
 }
 
+impl Default for Environment {
+    fn default() -> Self {
+        Environment::new()
+    }
+}
+
 impl Environment {
     pub fn new() -> Environment {
         Environment {

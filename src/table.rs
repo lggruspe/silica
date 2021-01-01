@@ -5,12 +5,17 @@ use crate::interpreter::Interpreter;
 use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
 use std::collections::{BTreeSet, HashMap};
-use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Table {
     indices: BTreeSet<i64>,
     pairs: HashMap<Value, Value>,
+}
+
+impl Default for Table {
+    fn default() -> Self {
+        Table::new()
+    }
 }
 
 impl Table {
@@ -63,12 +68,6 @@ impl Table {
             Some(&n) => n,
             None => 0,
         }
-    }
-}
-
-impl Hash for Table {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unimplemented!(); // TODO
     }
 }
 
