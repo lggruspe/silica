@@ -1,7 +1,6 @@
-use crate::ast::{Exception, LuaResult};
 use crate::basic::tonumber;
 use crate::function::Callable;
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Exception, Interpreter, LuaResult};
 use crate::object::{Object, ObjectReference};
 use std::hash::{Hash, Hasher};
 use std::ptr::null_mut;

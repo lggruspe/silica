@@ -32,8 +32,9 @@ impl<'a> Parser<'a> {
 #[derive(Debug)]
 pub struct SyntaxError(pub &'static str);
 
-pub fn parse(parser: &mut Parser) -> Result<Block, SyntaxError> {
-    parse_chunk(parser)
+pub fn parse(source: &str) -> Result<Block, SyntaxError> {
+    let mut parser = Parser::new(Scanner::new(&source));
+    parse_chunk(&mut parser)
 }
 
 fn parse_chunk(parser: &mut Parser) -> Result<Block, SyntaxError> {

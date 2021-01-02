@@ -1,7 +1,6 @@
-use crate::ast::Exception;
 use crate::env::Environment;
 use crate::function::Function;
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Exception, Interpreter};
 use crate::object::{Object, ObjectReference};
 use crate::value::{Float, Value};
 use std::collections::{BTreeSet, HashMap};

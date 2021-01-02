@@ -1,6 +1,6 @@
-use crate::ast::{exec_block, Exception, FunctionBody};
+use crate::ast::FunctionBody;
 use crate::env::Environment;
-use crate::interpreter::Interpreter;
+use crate::interpreter::{exec_block, Exception, Interpreter};
 use crate::value::Value;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
