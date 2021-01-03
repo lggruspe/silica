@@ -370,9 +370,31 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    /// Advance one character in the source code.
+    /// The following characters are converted into a single newline.
+    ///
+    /// - Carriage return
+    /// - Carriage return followed by a newline
+    /// - Newline followed by a carriage return
     fn advance(&mut self) -> Option<char> {
         self.column += 1;
-        self.source.next()
+        match self.source.next() {
+            Some('\n') => {
+                self.line += 1;
+                if let Some('\r') = self.peek() {
+                    self.source.next();
+                }
+                Some('\n')
+            }
+            Some('\r') => {
+                self.line += 1;
+                if let Some('\n') = self.peek() {
+                    self.source.next();
+                }
+                Some('\n')
+            }
+            default => default,
+        }
     }
 
     fn advance_if_eq_else(&mut self, c: char, a: Category, b: Category) -> Token {
@@ -410,9 +432,6 @@ fn skip_whitespace(scanner: &mut Scanner) {
     while let Some(lookahead) = scanner.peek() {
         if is_whitespace(lookahead) {
             scanner.advance();
-        }
-        if lookahead == '\n' {
-            scanner.line += 1;
         }
     }
 }
@@ -481,9 +500,7 @@ fn match_long_comment(scanner: &mut Scanner) {
         return skip_line(scanner);
     };
     while let Some(c) = scanner.advance() {
-        if c == '\n' {
-            scanner.line += 1;
-        } else if c == ']' && resume_closing_long_bracket(scanner, level) {
+        if c == ']' && resume_closing_long_bracket(scanner, level) {
             break;
         }
     }
@@ -526,20 +543,7 @@ fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Category> {
     let mut val = String::new();
     loop {
         match scanner.advance() {
-            Some('\n') => {
-                scanner.line += 1;
-                if let Some('\r') = scanner.peek() {
-                    scanner.advance();
-                }
-                val.push('\n');
-            }
-            Some('\r') => {
-                scanner.line += 1;
-                if let Some('\n') = scanner.peek() {
-                    scanner.advance();
-                }
-                val.push('\n');
-            }
+            Some('\n') => val.push('\n'),
             Some(']') => {
                 if resume_closing_long_bracket(scanner, level) {
                     break;
@@ -560,7 +564,6 @@ fn resume_long_literal_string(scanner: &mut Scanner) -> Option<Category> {
 fn skip_line(scanner: &mut Scanner) {
     while let Some(c) = scanner.advance() {
         if c == '\n' {
-            scanner.line += 1;
             break;
         }
     }
