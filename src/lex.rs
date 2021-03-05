@@ -239,11 +239,7 @@ fn match_numeral(scanner: &mut Scanner, prefix: char) -> Token {
     };
     if lexeme == "0" {
         match scanner.peek() {
-            Some('x') => {
-                scanner.advance();
-                return resume_hex(scanner);
-            }
-            Some('X') => {
+            Some('x') | Some('X') => {
                 scanner.advance();
                 return resume_hex(scanner);
             }
@@ -418,12 +414,9 @@ impl<'a> Scanner<'a> {
 
 fn is_whitespace(c: char) -> bool {
     match c {
-        ' ' => true,
-        '\n' => true,
-        '\r' => true,
-        '\t' => true,
-        '\x0b' => true, // vertical tab
-        '\x0c' => true, // form feed
+        ' ' | '\n' | '\r' | '\t' | '\x0b' // vertical tab
+            | '\x0c' // form feed
+            => true,
         _ => false,
     }
 }
